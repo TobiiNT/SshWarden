@@ -1,0 +1,106 @@
+# Running the published image.
+#
+#     docker compose -f deploy/compose.yaml up -d
+#
+# Three things are yours before this starts, and none of them can be shipped in a file: the key this
+# process reaches your hosts with, the fingerprint of each host read over a channel you trust, and
+# the config file that holds both. `sshwarden init` writes the last one; the README's *Running it*
+# writes the first two. This file only says how the container is wired.
+#
+# WHAT A CONTAINER CHANGES, AND IT IS NOT NOTHING
+# -----------------------------------------------
+# Two of this project's defaults are written for a process on a host, and both need a different
+# value in here. The listen address is one, below. File ownership is the other: a bind mount keeps
+# the host's uid and the host's mode, and startup refuses a config or a key that is readable beyond
+# its owner. That check does not know it is in a container, and it is right not to.
+
+name: sshwarden
+
+services:
+  sshwarden:
+    # `latest` moves under a running host, which makes "which build is serving this" unanswerable at
+    # exactly the moment somebody needs it answered. Every push to main also publishes
+    # `ghcr.io/tobiint/sshwarden:<commit-sha>`, which is an identity rather than a pointer: deploy
+    # once from `latest`, then pin the sha you got and change it deliberately.
+    image: ghcr.io/tobiint/sshwarden:latest
+
+    # **Docker cannot express the distinction this process draws, and that is worth knowing before
+    # you need it.** SshWarden exits 78 for a config that will fail identically on every restart and
+    # 69 for something upstream that was merely still booting, because a supervisor should give up on
+    # the first and retry the second. No Docker restart policy discriminates by exit code, so under
+    # any of them a typo in the config becomes a restart loop rather than a stop.
+    #
+    # The practical consequence: when this container is looping, read the *first* failure in the log,
+    # because every one after it is a copy. `deploy/sshwarden.service` is where the distinction is
+    # real, and it is the reason that file exists beside this one.
+    restart: unless-stopped
+
+    # Two halves of one decision, and they only make sense together.
+    #
+    # **Inside the container, `server.listen` in your config file must be `0.0.0.0:8760`**, not the
+    # `127.0.0.1:8760` the example ships. A published port forwards to the container's own address
+    # rather than to its loopback, so a process bound to 127.0.0.1 in here answers nothing Docker
+    # publishes. Reasoned rather than measured: written without a Docker daemon to test against, and
+    # Docker's own networking documentation does not state it either way (looked, 2026-08-27, on the
+    # networking and port-publishing pages). What *is* measured is that `0.0.0.0` starts and serves.
+    #
+    # **Outside, the host half of this mapping is pinned to 127.0.0.1**, so the socket a machine on
+    # the network can reach belongs to your reverse proxy and not to this process. That is the same
+    # boundary the loopback default draws on a host, moved one layer out to where a container can
+    # still draw it. Dropping the `127.0.0.1:` prefix here publishes this on every interface, which
+    # is the thing the default was protecting you from.
+    #
+    # Startup will warn that the listen address is not loopback. The warning is correct in general
+    # and answered here by the line below; it is not answered if you also widen this mapping.
+    ports:
+      - "127.0.0.1:8760:8760"
+
+    volumes:
+      # Mounted, never baked. This file holds the bearer token and the grant table, and an image
+      # layer is readable by anybody who can pull the image. Read-only because nothing in this
+      # process ever writes it.
+      #
+      # **Mode 0600 on the host, owned by the uid the container runs as.** Measured 2026-08-27: at
+      # mode 0640 startup exits 78 with "is readable beyond its owner (mode grants GroupRead) ... it
+      # must be mode 0600", and the private key gets the same treatment. The image sets
+      # `USER $APP_UID` rather than root, so a file left owned by host root at 0600 is one this
+      # process cannot open at all. Ask the image which uid that is rather than trusting a number
+      # written here, because the base image chooses it:
+      #
+      #     docker run --rm --entrypoint id ghcr.io/tobiint/sshwarden
+      #     chown <that uid>:<that gid> /etc/sshwarden/sshwarden.toml /etc/sshwarden/id_ed25519
+      #
+      # Not measured: what the failure looks like when the mode is right and the owner is not. It
+      # was not reproducible here without a daemon, so treat "it will not start and the message
+      # names this file" as the shape rather than a quoted string.
+      - /etc/sshwarden/sshwarden.toml:/etc/sshwarden/sshwarden.toml:ro
+      - /etc/sshwarden/id_ed25519:/etc/sshwarden/id_ed25519:ro
+
+      # The audit log and the job registry, and they must outlive the container.
+      #
+      # The audit log is the source of truth for every call this server allowed or refused; the job
+      # registry is what makes a job started before a restart still pollable, killable and owned by
+      # the caller who started it. On the container's own filesystem both die with the container,
+      # which turns a routine `docker compose pull && up -d` into a running job nobody can reach and
+      # an audit trail with a hole in it.
+      #
+      # A named volume rather than a bind mount, because a bind mount would land the uid problem
+      # above on a directory this process has to *write*, where getting it wrong fails at startup
+      # anyway: the audit path is checked for writability before the server starts, deliberately,
+      # since a choke point that runs commands it cannot record is worse than one that is not
+      # running.
+      - state:/var/log/sshwarden
+
+    # No `healthcheck:` here, and its absence is a decision rather than an oversight. `/health`
+    # answers without a credential and is exactly what one would poll (measured 2026-08-27:
+    # `{"ok":true,"server":"sshwarden"}`, while `/mcp` and `/metrics` answer 401 without one). What
+    # is missing is a tool to poll it with: the ASP.NET runtime image is not guaranteed to carry
+    # curl or wget, and a healthcheck whose binary is absent reports unhealthy forever, which is
+    # worse than no healthcheck at all. Check what your image actually contains, then add one.
+
+    # Nothing in `environment:`, deliberately. The image already sets SSHWARDEN_CONFIG to the path
+    # mounted above, and that variable names the file rather than anything in it. A secret does not
+    # go here: `docker inspect` prints this section, and so does anything that scrapes it.
+
+volumes:
+  state:

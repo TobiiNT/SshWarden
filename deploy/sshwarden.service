@@ -1,0 +1,93 @@
+# Running SshWarden as a service, without a container.
+#
+#     install -m 644 deploy/sshwarden.service /etc/systemd/system/sshwarden.service
+#     systemctl daemon-reload && systemctl enable --now sshwarden
+#
+# `deploy/compose.yaml` runs the published image and is the shorter path. This file exists because
+# one thing cannot be said in that one: what a supervisor should do when this process exits.
+
+[Unit]
+Description=SshWarden, an MCP server that runs commands over SSH behind a grant table
+Documentation=https://github.com/TobiiNT/SshWarden
+
+# Not plain `network.target`, which is reached before an address is configured. This process opens
+# SSH connections and, in oauth mode, fetches an authorization server's metadata at startup; both
+# want a network that routes rather than one that exists.
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+# **Not `Type=notify`.** This host does not reference Microsoft.Extensions.Hosting.Systemd, so
+# nothing ever sends READY=1 and the unit would sit in "activating" until its timeout, then be
+# killed as failed. `exec` rather than `simple` so that a unit whose binary is missing or
+# unexecutable fails at start instead of reporting success and exiting a moment later.
+Type=exec
+
+# Its own account, and this is the boundary that actually holds. Everything the grant table decides
+# happens inside this process; what stops a defect in it from reading the rest of the machine is
+# that this user cannot. Create it with no shell and no home:
+#
+#     useradd --system --no-create-home --shell /usr/sbin/nologin sshwarden
+User=sshwarden
+Group=sshwarden
+
+# The apphost `dotnet publish` produces, under wherever you unpacked it. The README calls the
+# command `sshwarden`; link it to that name if you prefer, but the published file is this one and
+# naming it here saves a rename that nothing checks.
+#
+# `--config` is the only argument this reads, for the reason the config file states about `ps`.
+ExecStart=/opt/sshwarden/SshWarden.Server --config /etc/sshwarden/sshwarden.toml
+
+# **The three lines this file exists for.**
+#
+# SshWarden exits 78 (EX_CONFIG) for a config that will fail identically on every restart, and 69
+# (EX_UNAVAILABLE) for something upstream that was merely still booting. Restarting fixes the second
+# and wastes the first, which is why they are different numbers rather than a shared 1. Measured
+# 2026-08-27: a missing config file and an unknown key both exit 78, each printing every problem it
+# found rather than the first.
+#
+# Without RestartPreventExitStatus a typo becomes a restart loop, and the log fills with copies of
+# one message until the real first one has scrolled away. With it, `systemctl status` says the unit
+# is failed and why, once. No Docker restart policy can express this, which is the honest difference
+# between this file and the compose one beside it.
+Restart=on-failure
+RestartPreventExitStatus=78
+RestartSec=5s
+
+# A clean stop is not a failure and must not be restarted. Measured 2026-08-27: SIGTERM shuts the
+# server down and exits 0, so `Restart=on-failure` already leaves `systemctl stop` alone. Stated
+# here because it is the assumption that line rests on.
+KillSignal=SIGTERM
+
+# Hardening. Kept to what this process is known to need, because a directive that is wrong here
+# fails at start for a reason nobody connects back to this file.
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+
+# The one path it writes: the audit log and the job registry. `ProtectSystem=strict` makes the rest
+# of the filesystem read-only, so this line is what keeps the process able to record what it did.
+# Startup checks the audit path for writability before serving anything, deliberately, so getting
+# this wrong is a refusal at boot rather than a gap discovered later.
+ReadWritePaths=/var/log/sshwarden
+
+# **Two hardening directives are deliberately absent, and neither absence is caution for its own
+# sake.**
+#
+# `MemoryDenyWriteExecute` would deny the pages a JIT needs to write and then execute. Whether the
+# .NET runtime tolerates it depends on the runtime's own write-xor-execute setting, which was not
+# measured here; turning it on untested buys a unit that may refuse to start for a reason that reads
+# like a SshWarden defect.
+#
+# `ProtectHome` would hide the service account's home directory. ASP.NET Core's data protection
+# keeps keys under it by default, and whether this process ever initialises data protection was not
+# measured. It authenticates with bearer tokens rather than cookies, so it probably does not, and
+# "probably" is not the standard this repository holds itself to.
+
+[Install]
+WantedBy=multi-user.target

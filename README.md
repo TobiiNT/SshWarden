@@ -88,8 +88,40 @@ authorization server that is still booting does not.
 
 Or write the config by hand from
 [`sshwarden.example.toml`](hosts/SshWarden.Server/sshwarden.example.toml), which is the same keys
-with the reasoning beside each one. There is a `Dockerfile` under `hosts/SshWarden.Server/`; build
-it from the repository root.
+with the reasoning beside each one.
+
+## Deploying
+
+That is the shape for trying this out. For a machine that keeps running it there are two files under
+[`deploy/`](deploy/), and what separates them is what a supervisor does when this process exits.
+
+```bash
+docker compose -f deploy/compose.yaml up -d
+```
+
+Every push to main publishes `ghcr.io/tobiint/sshwarden` at the commit sha and at `latest`. Deploy
+once from `latest`, then pin the sha you got: `latest` moves under a running host, which makes
+"which build is serving this" unanswerable at the moment somebody asks.
+
+**Two defaults need different values in a container**, and both are commented where you change them.
+`server.listen` has to be `0.0.0.0:8760`, because a published port forwards to the container's own
+address and not to its loopback; the compose file pins the host half of the mapping to `127.0.0.1`
+instead, which is the same boundary one layer out. And the config file and the private key have to
+be owned by the uid the image runs as, because a bind mount keeps the host's owner while startup
+still refuses anything readable beyond that owner.
+
+[`deploy/sshwarden.service`](deploy/sshwarden.service) runs the published binary under systemd
+instead, and carries the one thing no Docker restart policy can express: `RestartPreventExitStatus=78`.
+A bad config exits 78 and will exit 78 every time, so under Docker it becomes a restart loop and
+under systemd a failed unit with the reason in `systemctl status`. If you run the container, read the
+*first* failure in its log; every one after it is a copy.
+
+Neither file gives you TLS, and you need it. This speaks plain HTTP and authenticates with a bearer
+token, so what belongs in front of it is a reverse proxy terminating TLS. `/health` is the one route
+that answers without a credential.
+
+To build the image yourself rather than pull it, there is a `Dockerfile` under
+`hosts/SshWarden.Server/`; build it from the repository root.
 
 ## Security, stated plainly
 
