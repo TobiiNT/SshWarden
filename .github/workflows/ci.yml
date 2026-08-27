@@ -37,6 +37,40 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # The one rule in CLAUDE.md that a machine can settle, settled by one. It ran nowhere until now,
+  # which meant it held for exactly as long as somebody remembered it - and the command the file
+  # documented was itself red on any tree that had been built, because it had no exclusions and
+  # matched a compiled `.dll` under `bin/`. A rule whose own check does not pass is worse than an
+  # unchecked rule: the next person to run it learns to ignore it.
+  prose:
+    runs-on: ubuntu-latest
+
+    # Seconds. Anything near this is a hung checkout rather than a slow grep.
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: No em-dashes
+        run: |
+          set -euo pipefail
+
+          # Tracked files only, which is what makes this correct where the documented command was
+          # not: `bin/` and `obj/` are untracked, so they cannot be scanned, and no exclude list has
+          # to be kept in step with the build output. `-I` skips anything binary, for the day
+          # something binary is checked in.
+          #
+          # Inverted on purpose: grep exits 0 when it finds one, and finding one is the failure.
+          if git ls-files -z | xargs -0 env LC_ALL=C.UTF-8 grep -nIP '\x{2014}'; then
+            echo "::error::Em-dash found at the lines above. CLAUDE.md bans U+2014: use a comma, a"
+            echo "::error::colon, a full stop, or ' - '. It applies to strings too here, because"
+            echo "::error::this repository has never had one in a literal and its messages are"
+            echo "::error::matched character for character by tests."
+            exit 1
+          fi
+
+          echo "No em-dash in any tracked file."
+
   test:
     runs-on: ubuntu-latest
 
