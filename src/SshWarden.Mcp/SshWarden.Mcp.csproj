@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>SshWarden.Mcp</RootNamespace>
+    <Description>The HTTP and MCP surface of SshWarden: the authentication middleware in front of the endpoint, and the wiring that puts them together.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="ModelContextProtocol.AspNetCore" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../SshWarden/SshWarden.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="SshWarden.Mcp.Tests" />
+  </ItemGroup>
+
+</Project>

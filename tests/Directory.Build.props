@@ -1,0 +1,33 @@
+<Project>
+
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))" />
+
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+
+    <!--
+      CA1707 bans underscores in member names, and every test method here is named as a sentence:
+      `A_file_readable_beyond_its_owner_is_refused`. That is not a style preference - a failing test
+      prints its method name and nothing else, so the name is the whole of what a reader gets when
+      the build goes red at three in the morning. Renaming these to PascalCase would trade a
+      sentence for a run-on word to satisfy a rule written for a public API surface, and none of
+      these are public API: this whole directory is IsPackable=false.
+
+      Scoped to tests/ and nowhere else, so the rule still holds over everything that ships.
+    -->
+    <NoWarn>$(NoWarn);CA1707</NoWarn>
+
+    <!--
+      No XML documentation file, so CS1591 stops demanding a <summary> on every [Fact]. The
+      sentence-shaped method name is the documentation, and a doc comment restating it is a second
+      copy to drift. Where a test needs to say *why* the rule exists rather than what it checks,
+      that goes in a comment beside the assertion, which is where somebody looking at a failure is
+      already reading.
+
+      The ships-to-users half of the tree keeps GenerateDocumentationFile on.
+    -->
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+
+</Project>

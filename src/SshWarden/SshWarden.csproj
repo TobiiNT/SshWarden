@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>SshWarden</RootNamespace>
+    <Description>The parts of SshWarden that do not depend on how it is hosted: the authenticator seam, the identity every authenticator fills, and the config file.</Description>
+  </PropertyGroup>
+
+  <!--
+    No ASP.NET Core and no MCP SDK here - deliberately, and it is the same absence Boltway keeps
+    between its resource server and its authorization server. The authenticator seam, the grant
+    table and the command builder are the security decisions of this project, and they are worth
+    being able to test without standing up a web host. Something that needs the request pipeline
+    belongs in SshWarden.Mcp.
+  -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+    <PackageReference Include="Tomlyn" />
+    <PackageReference Include="SSH.NET" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="SshWarden.Tests" />
+  </ItemGroup>
+
+</Project>

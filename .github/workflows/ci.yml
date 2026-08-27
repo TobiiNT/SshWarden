@@ -1,0 +1,130 @@
+# Build, test, and prove the image still builds — on every pull request and every push to main.
+#
+# There was nothing. Everything anybody knew about whether this repository was green came from
+# somebody running `dotnet test` on their own machine and saying so, which is a claim rather than a
+# check — and it stops being available entirely the moment a stranger opens a pull request, which is
+# the point of publishing this at all.
+#
+# The image job earned its place on its first run: `hosts/SshWarden.Server/Dockerfile` could not be
+# built. The host grew a reference to SshWarden.OAuth in step 8 and the Dockerfile's restore-layer
+# copy list did not, and `dotnet restore` reports success while skipping a project file it cannot
+# find — so the only thing that would ever have said so is a job that builds the image.
+
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Read, and nothing else. Nothing here publishes: the image is built and thrown away, because what
+# is being checked is that the Dockerfile is buildable, not that a registry has a copy. A job with
+# no credential is a job that cannot leak one, and this repository's whole subject is credentials.
+permissions:
+  contents: read
+
+# A second push to the same branch makes the first run's answer worthless, and a queue of superseded
+# runs is how a red that mattered gets scrolled past.
+#
+# Cancelling on main too, which is safe only because nothing here produces a per-commit artifact:
+# the image is discarded, so a cancelled run on main leaves nothing missing. **The day a job pushes
+# an image tagged by sha, that stops being true** — a superseded branch tip is a fine thing to
+# cancel, and a commit that is permanently addressable is not. Boltway learned that by making a
+# commit unreleasable; change this line in the same edit that adds the push.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    # The default is 360 minutes, which is not a ceiling anybody chose. The integration suite starts
+    # a real sshd and waits for it to accept, so the shape of a bad day here is a wait that never
+    # ends rather than a run that is slow — and six hours of that is six hours of nothing being
+    # said. Sized well above the honest duration (about a minute of build and half a minute of
+    # tests, measured 2026-08-27) so that reaching it means stuck rather than slow.
+    timeout-minutes: 20
+
+    steps:
+      # PINNED TO COMMITS, NOT TAGS
+      # ---------------------------
+      # A tag is a mutable pointer in somebody else's repository: `v5` is whatever its owner last
+      # pointed it at. Neither action here holds a credential, so this is not the sharpest case it
+      # could be — but a pinned action is reviewable and a floating one is not, and an action is a
+      # dependency that appears in no lockfile at all. `Directory.Packages.props` already makes that
+      # argument about NuGet.
+      #
+      # A pin rots, which is the honest cost. `.github/dependabot.yml` is the other half: it moves
+      # the sha and the trailing version comment together, so the pin is reviewed rather than frozen.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # From global.json rather than a version repeated here. Two places naming an SDK version is
+      # two places to forget, and the one that does not appear in the repository root is the one a
+      # contributor will not think to change.
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+
+      # SshWarden.Ssh.IntegrationTests starts a real OpenSSH server on loopback and **fails rather
+      # than skips** when there is not one — deliberately, because a suite that skips itself is
+      # green in exactly the situation where it measured nothing.
+      #
+      # **Measured on the first run of this workflow, 2026-08-27: ubuntu-latest already ships it**
+      # - `/usr/sbin/sshd`, 921416 bytes, dated 9 July - so the install branch below did not fire and
+      # the 48 integration tests passed in 20 seconds. The branch stays anyway: a runner image is
+      # somebody else's artefact and this repository's rule is that what was true on one date is a
+      # measurement rather than a guarantee. If it ever fires, the notice below says so in the log.
+      #
+      # What this must not become is a step that swallows the absence: a missing sshd would then
+      # arrive as a wall of failing tests that read like a defect in this repository's SSH layer.
+      - name: The integration suite needs a real sshd
+        run: |
+          set -euo pipefail
+
+          if [ ! -x /usr/sbin/sshd ]; then
+            echo "::notice::No /usr/sbin/sshd on this runner; installing openssh-server."
+            sudo apt-get update
+            sudo apt-get install -y --no-install-recommends openssh-server
+          fi
+
+          # Named rather than assumed, because the fixture shells out to it for both key pairs and
+          # `ssh-keygen: not found` is a two-word failure inside a test log.
+          command -v ssh-keygen
+          ls -l /usr/sbin/sshd
+
+      # Release, because that is the configuration the image ships and it is not always the one a
+      # defect shows up in. Warnings are errors in this repository — Directory.Build.props sets
+      # TreatWarningsAsErrors, on the grounds that this process opens shells on production hosts —
+      # so there is no separate lint step: a warning already fails this line.
+      - name: Build
+        run: dotnet build SshWarden.slnx --configuration Release
+
+      # --no-build, so what is tested is the assemblies the step above produced rather than a second
+      # build that could differ from it.
+      - name: Test
+        run: dotnet test SshWarden.slnx --configuration Release --no-build
+
+  image:
+    runs-on: ubuntu-latest
+
+    # No `needs: test`. The two answer different questions and a broken Dockerfile is worth knowing
+    # about on the same run as a broken test rather than on the one after it.
+    timeout-minutes: 15
+
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Built and discarded — no `push`, no registry login, no credential. What this checks is that
+      # the Dockerfile's restore-layer copy list still names every project the host references,
+      # which nothing else can check: `dotnet restore` skips a project file it cannot find and
+      # reports success, and the real failure lands two layers later as a missing assets file.
+      #
+      # From the repository root, because the build needs Directory.Build.props and
+      # Directory.Packages.props above the Dockerfile's own directory.
+      - name: Build the image
+        run: docker build -f hosts/SshWarden.Server/Dockerfile -t sshwarden:${{ github.sha }} .

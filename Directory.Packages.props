@@ -1,0 +1,123 @@
+<Project>
+
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <!--
+      A transitive dependency pinned by a direct <PackageReference> without a version here should be
+      an error rather than a silent floating restore.
+    -->
+    <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
+  </PropertyGroup>
+
+  <ItemGroup Label="MCP">
+    <!--
+      The transport. 2.2.0 is what Boltway.Mcp 0.2.0 and later depend on at >= 2.2.0, so pinning
+      anything lower here is NU1605 the moment step 8 of docs/DESIGN.md §7 adds that reference - a
+      package downgrade, which is an error in this repository rather than a warning. Another consumer
+      found that out by restoring rather than by reading: these two versions are one decision, and
+      the one written down here is the one that has to move first.
+
+      2.2.0 is also where `WithRequestFilters` / `AddCallToolFilter` / `AddListToolsFilter` live,
+      which is the single place docs/DESIGN.md §6.5.5 puts the per-tool gate. Step 2 depends on it.
+    -->
+    <PackageVersion Include="ModelContextProtocol.AspNetCore" Version="2.2.0" />
+
+    <!-- Pinned exactly rather than to a range. docs/DESIGN.md §6.2, and the reason is the same
+         one Boltway's own VERSIONING.md gives: a published version is frozen forever, so naming one
+         is naming a tree somebody can go and read.
+
+         0.4.0, up from 0.3.0, for two things this repository stopped hand-writing at that version:
+         AddJwksSigningKeys moved into Boltway.ResourceServer, where a resource server looks for it,
+         and Boltway.ResourceServer.Testing appeared. 0.3.0 remains the release that first carried
+         CallerPrincipal.ScopeClaim, which is what makes an empty scope set stop meaning three
+         different things - nothing here needs a version older than that. -->
+    <PackageVersion Include="Boltway.ResourceServer" Version="0.4.0" />
+    <PackageVersion Include="Boltway.OAuth.Net" Version="0.4.0" />
+
+    <!-- Test-only, and referenced from both OAuth suites rather than only the Boltway one.
+
+         What it carries is RFC 9728 conformance run against a wired pipeline - eight assertions
+         over an HttpClient, a resource identifier and one protected path, with no Boltway type in
+         its surface. That makes it as true of this repository's own OAuth mode as of the Boltway
+         one, and the defect it exists to catch (a host whose authentication middleware does not
+         read the framework's anonymous marker, so the discovery document answers 401) is a defect
+         SshWarden.OAuth can have just as easily.
+
+         **It is a test dependency and it stays one.** src/SshWarden.OAuth references nothing from
+         Boltway and must not begin to: a deployment on any other authorization server is the case
+         that assembly exists for. Deriving a conformance suite is not the same as depending on the
+         implementation it was written beside. -->
+    <PackageVersion Include="Boltway.ResourceServer.Testing" Version="0.4.0" />
+  </ItemGroup>
+
+  <ItemGroup Label="Configuration">
+    <!--
+      TOML, and not appsettings.json, because of what docs/DESIGN.md §6.4 asks of this file: "reading
+      the config file tells you immediately who can touch what, without having to work it out". The
+      grant table in §6.5.4 is an array of tables - one block per rule, each naming a subject, the
+      scopes it needs, the tools it covers and the hosts it reaches. TOML writes that as repeated
+      [[grant]] blocks; JSON writes it as an array of brace-nested objects that a reviewer has to
+      count commas through. The file is a security surface read by a human under time pressure, so
+      the format is chosen for that reader.
+
+      Tomlyn is BSD-2-Clause, and its parse failure carries every diagnostic with a line and column
+      rather than only the first - which is what lets the loader's refusal name the line it refused
+      instead of asking the operator to find it (docs/DESIGN.md's "a refusal names its boundary",
+      inherited from Boltway's CLAUDE.md). Measured against 2.10.1 on 2026-08-26: a truncated table
+      header reports `(1,8) : error : Expected `]` but was ...`.
+
+      **What to know before moving off this version.** 2.x targets TOML 1.1.0 and its own readme says
+      it does not support 1.0. TOML 1.1 is not a finalised revision, so that is a dependency on a
+      moving target - accepted here because 1.1 only adds syntax to 1.0, so a file written to the
+      finalised revision (which is all the example config and everything the README documents uses)
+      parses under either, and the risk is one-directional: a config using 1.1-only syntax would not
+      be readable by other tooling. Do not reach for 1.1-only syntax in anything this repository
+      ships. The 0.x line of this package is the TOML 1.0 parser with a different API, if that
+      trade ever needs reversing.
+    -->
+    <!--
+      For the log declarations in SshWarden/Diagnostics. Abstractions only: this project holds the
+      security decisions and is meant to be testable without a host, so it takes the interface and
+      leaves every provider to whoever composes the process.
+    -->
+    <!--
+      The generic OAuth path. The framework's own bearer handler rather than a hand-written
+      validator: it does OpenID Connect discovery, key rotation and the RFC 9068 checks, and every
+      .NET reader already knows what it is.
+    -->
+    <PackageVersion Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.10" />
+    <PackageVersion Include="Tomlyn" Version="2.10.1" />
+  </ItemGroup>
+
+  <ItemGroup Label="SSH">
+    <!--
+      MIT, and the semantics docs/DESIGN.md §4.1 wants are already here rather than something to build:
+      a client that owns the TCP connection and the SSH handshake, and a new channel per command.
+      What matters is what is *not* used - CreateShellStream keeps shell state across commands,
+      which is the thing this project deliberately does not have, and the library's own forum
+      advice recommends it for running several commands. It is the main trap at this layer.
+
+      Two behaviours measured against 2026.0.0's own XML docs on 2026-08-26, because both shape the
+      code: ConnectionInfo.MaxSessions defaults to 10, so one client per host is a ceiling of ten
+      concurrent commands whatever any other limit says; and CancelAsync documents that "when the
+      server does not implement signals, it may send no response", which is why a timeout is
+      wrapped on the remote side rather than trusted to cancellation.
+    -->
+    <PackageVersion Include="SSH.NET" Version="2026.0.0" />
+  </ItemGroup>
+
+  <ItemGroup Label="Tests">
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.9.0" />
+    <PackageVersion Include="xunit" Version="2.9.3" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="4.0.0" />
+    <!--
+      An in-memory server, so the authentication middleware is exercised through a real HTTP
+      pipeline - routing, endpoint metadata, headers and status codes - without binding a port. The
+      thing under test is what a caller gets back, and asserting on middleware in isolation would
+      not have caught the ordering mistake that makes the endpoint-metadata opt-out invisible.
+    -->
+    <PackageVersion Include="Microsoft.AspNetCore.TestHost" Version="10.0.11" />
+  </ItemGroup>
+
+</Project>

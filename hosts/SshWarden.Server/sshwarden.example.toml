@@ -1,0 +1,327 @@
+# SshWarden configuration.
+#
+# Copy this somewhere the service account can read and nothing else can:
+#
+#     install -m 600 sshwarden.example.toml /etc/sshwarden/sshwarden.toml
+#
+# The mode matters and is checked at startup. This file holds the credentials that reach the SSH
+# layer and the rules that decide who reaches which machine, and SshWarden refuses to start if
+# anyone but the owner can read it.
+#
+# It is also the whole of the configuration: nothing here can be overridden by an environment
+# variable or a command-line argument, because an argument is readable by every process on the
+# machine through `ps`. The only argument SshWarden reads is `--config <path>`, and the only
+# environment variable is SSHWARDEN_CONFIG, which names this file rather than anything in it.
+#
+# An unknown key is a startup failure, not a line that gets ignored. A misspelled key would
+# otherwise be a rule that silently does not apply.
+
+[server]
+
+# Loopback by default. Clients reach SshWarden from the internet, so a real deployment does have to
+# be publicly reachable - through a reverse proxy terminating TLS in front of this, not by opening
+# this socket to the world. Startup warns when this is not loopback.
+listen = "127.0.0.1:8760"
+
+# Where the MCP endpoint is mapped.
+mcp_path = "/mcp"
+
+[auth]
+
+# The only mode this build supports. There is no mode that skips authentication.
+mode = "static-token"
+
+# One block per credential. The name is what every log line and every refusal calls this token, the
+# subject is who it acts as, and client_id is optional - it defaults to the name.
+#
+# `subject` is per token on purpose: the grant table below is keyed on it, so two tokens with two
+# subjects can be given different reach. Two tokens may share a subject deliberately, when they are
+# two credentials for one person.
+[[auth.static_token]]
+name = "claude-code-cloud"
+subject = "someone"
+
+# REPLACE THIS. It is a placeholder and SshWarden refuses to start with it, because a static token
+# does not expire and being unguessable is the whole of its security. Generate one with:
+#
+#     openssl rand -base64 32
+#
+# A static token also cannot be revoked except by editing this file and restarting.
+token = "replace-me"
+
+[ssh]
+
+# The key SshWarden authenticates with. Make it a key for this process and nothing else: the unix
+# account a key lands in is the boundary that actually holds, and a key with broad reach picks that
+# account before the grant table gets a say. Refused at startup if anyone else can read it.
+identity_file = "/etc/sshwarden/id_ed25519"
+
+# Seconds. Defaults shown.
+connect_timeout_sec = 15
+idle_eviction_sec = 300
+default_timeout_sec = 60
+max_timeout_sec = 900
+
+# One block per machine. Declared rather than inferred from the rules below, because two things have
+# to be true before a connection is made and only one of them is a permission: the caller must be
+# allowed to reach the host, and SshWarden must know how to verify it is talking to the right one.
+[[host]]
+name = "dev-web-1"
+address = "10.0.0.5"          # optional; defaults to name
+port = 22                     # optional; defaults to 22
+
+# Required, with no trust-on-first-use and no way to switch it off. A connection made without
+# checking the host key hands the private key's authority, and every command, to whoever answered.
+# Read it over a channel you trust:
+#
+#     ssh-keyscan -t ed25519 dev-web-1 | ssh-keygen -lf -
+fingerprint = "SHA256:47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU"
+
+# A second machine, because the rules below reach two. Every host a rule names has to be declared:
+# a rule pointing at a host that is not here matches nothing, and startup says so rather than
+# leaving a rule that reaches nothing looking like one that works.
+#
+# The two fingerprints here are placeholders and they differ on purpose - one per machine, read from
+# each machine. Two hosts sharing a fingerprint means one key on both, which is worth noticing
+# rather than copying.
+[[host]]
+name = "prod-web-1"
+address = "10.0.0.9"
+fingerprint = "SHA256:Orx+bzTp2n7BT00tv1cUeUFzbh6AJV2gcSKvX0T0+V4"
+
+# Who may run what, where, and as which unix account. Deny by default: a call no rule covers is
+# refused, and the refusal says which rule refused it.
+#
+# Read this section top to bottom and you should be able to say who can touch what without working
+# anything out. That is what it is for.
+[[grant]]
+
+# Written by you, not derived from this block's position. It goes into the audit record as the rule
+# that decided, which is what a dashboard query matches on - and an id derived from position
+# renumbers the moment somebody inserts a rule above it.
+id = "dev-exec"
+
+subject = "someone"
+
+# Scopes the access token must carry for this rule to apply. Leave it out for a static-token
+# deployment: those carry no scope claim, and the rule then rests on everything else here.
+# scopes = ["ssh:exec"]
+
+# The tools this rule covers. v0 has exactly seven and the list is closed; a name outside it is a
+# startup failure, and a name this build has no handler for yet loads with a warning saying so.
+#
+# `start_job`, `poll_job` and `kill_job` are the same reach as `run` spread over time rather than
+# more of it: a job runs the same command as the same unix account, it just outlives the call. A
+# rule that grants `run` and withholds them is drawing a line that does not stop anything.
+#
+# `list_changes` is different, and worth granting separately: it reports what changed under the
+# watched paths regardless of who changed it, so it shows a caller the effects of work that was not
+# theirs. That is the point of it, and it is a decision.
+tools = ["run", "start_job", "poll_job", "kill_job", "list_changes"]
+
+# Globs over host names, matched label by label - '*' and '?' do not cross a dot. Not regex: a
+# mistake in a glob produces no match rather than a surprising one, and no match is refused.
+hosts = ["dev-*"]
+
+# The account commands under this rule run as, and the boundary that cannot be worked around.
+# Everything else here refuses early and writes a clear record, inside a process the target host
+# does not trust and cannot verify. Give it its own narrow account.
+ssh_user = "deploy"
+
+# A second rule, for reading rather than running. Note that it maps to a different unix account:
+# that is where the reach is actually decided, and the paths below are the layer in front of it.
+[[grant]]
+id = "prod-read"
+subject = "someone"
+tools = ["read_file", "tail_log"]
+hosts = ["prod-web-1"]
+
+# Globs over absolute paths, matched segment by segment. '*' stays inside one segment; '**' stands
+# for any number of segments, so '/var/log/*' is the log files and '/var/log/**' is the tree. Unlike
+# host names these are case-sensitive, because unix paths are.
+#
+# A path the caller names is checked twice: once as written, and once as the target resolves it. A
+# symlink out of this tree fails the second check - which is the only one that can see it. What
+# neither check closes is the gap between resolving and reading; that race is answered by the unix
+# account, not by this list.
+#
+# Rules with no paths refuse every read. That is deny-by-default working, and startup says so rather
+# than leaving a rule that reaches nothing looking like one that works.
+paths = ["/var/log/**", "/etc/nginx/**"]
+
+# Service units for tail_log, matched whole - a unit name's dots and '@' are part of the name. An
+# argument beginning with '/' is read as a path, so a unit rule containing one is refused at startup.
+units = ["nginx*", "app.service"]
+
+# An account that cannot read anything outside those paths in the first place. If it can, no amount
+# of pattern matching above changes what a caller can reach.
+ssh_user = "auditor"
+
+[output]
+
+# The most output bytes handed back for one stream, per call. Over this, the middle is cut and a
+# marker says how many lines and bytes went - the head says what the command was doing, the tail
+# says how it ended, and the tail gets the larger share because that is where an error usually is.
+#
+# 64 KiB is a starting point, not a measured optimum: too small wastes calls on re-running with a
+# filter, too large spends the caller's context on output it cannot use. Move it once there is real
+# usage to move it against.
+#
+# The cut happens after secret masking, never before. A secret lying across the cut would be two
+# fragments, and neither fragment matches the pattern that would have caught the whole.
+max_bytes = 65536
+
+[watch]
+
+# Directories swept for changes. A command log is not enough on its own: `ansible-playbook
+# deploy.yml` is one line in the audit record and forty changed files on the machine, and the second
+# is what somebody actually needs to see.
+#
+# Leave this empty and change detection is off - which is the default, because what is worth
+# watching is a property of the deployment. There is no sensible default here, only a default that
+# happens to be right for some machines.
+#
+# EVERYTHING UNDER THESE IS VISIBLE to anyone allowed `list_changes` on the host: which paths
+# changed and when, though not their contents. Putting a path here is that decision.
+paths = ["/etc", "/opt/app"]
+
+# How often to sweep, in seconds. This is the resolution limit of everything change detection
+# reports - see the README for what that costs. Sweeps only run on hosts that already have a live
+# connection, so an idle machine is never touched.
+interval_sec = 30
+
+# How long the timeline keeps entries, in minutes. It is in memory, so this is also how much a
+# restart loses.
+retention_min = 60
+
+# The most files one sweep reports. A sweep that hits this reports the fact rather than quietly
+# returning part of the tree: a sweep that saw half of somewhere has not measured the other half,
+# and "no changes" is the one answer it must not give.
+max_entries = 20000
+
+[audit]
+
+# Every call - allowed or refused - appends one JSON line here. This is the source of truth;
+# whatever ships it onward is a consumer. It contains output from your production hosts, so it stays
+# on the machine that wrote it.
+#
+# Checked for writability at startup, and a failure stops the process: a choke point that runs
+# commands it cannot record is worse than one that is not running.
+path = "/var/log/sshwarden/audit.jsonl"
+
+[jobs]
+
+# Where the registry of started jobs is kept, on this machine. On disk rather than in memory, and
+# that is not an optimisation: the process runs on the target and outlives a restart of this server.
+# An in-memory registry would not, so after a deploy every running job would be unpollable,
+# unkillable and - worse - unowned, leaving the check that stops one caller reaching another's job
+# with nothing to compare against.
+#
+# Beside the audit log, because both are this deployment's own state on this machine and a
+# deployment that has already answered "where does my state go" should not have to answer it twice.
+registry = "/var/log/sshwarden/jobs.jsonl"
+
+# The directory on each target that job directories are created under, relative to the home of the
+# unix account the rule maps to - an account that already owns its own files. Each job gets its own
+# directory below this, created mode 0700 with a umask set first, so its output is private from the
+# moment it exists rather than a moment after.
+#
+# THE OUTPUT FILE IS UNREDACTED ON THE TARGET and cannot be otherwise: the command writes to it
+# directly and nothing of SshWarden's is on that machine to intercept the write. Masking happens on
+# the way back through `poll_job`. What remains exposed is exposed to whoever can already read that
+# account's files - the same set of people who could have run the command in the first place.
+remote_directory = ".sshwarden/jobs"
+
+# How many lines `poll_job` returns when the caller does not say.
+default_poll_lines = 200
+
+[metrics]
+
+# Six metrics in Prometheus text format, scraped rather than pushed.
+#
+# That decision is NOT the one made about the audit log above. A file survives the collector dying
+# because the log is the source of truth; a metric is already an aggregate, and a scrape loses data
+# when the scraper dies exactly as a push loses data when the receiver does. The two reasons scraping
+# wins here are different ones: `curl` against this endpoint works before any collector exists, which
+# matters for a server whose misconfiguration means exposed SSH, and a deployment with no metrics
+# stack at all can still read it.
+#
+# Off means the route does not exist, rather than existing and answering an empty document - a
+# scraper believes an empty document and reports zero.
+enabled = true
+
+# IT NEEDS A CREDENTIAL, like every route here except /health. The `host` label carries the names of
+# your production machines, which is the same information the scope design goes out of its way never
+# to publish. Give your scraper a token of its own with NO [[grant]] rules pointing at its subject:
+# the numbers are aggregate and reading them needs no reach, and a scraper holding a token that can
+# run commands is a credential sitting in a config file for the sake of a counter.
+path = "/metrics"
+
+# ---------------------------------------------------------------------------
+# The other way in. Replace the [auth] block above with this one - the two are
+# alternatives, not a pair.
+#
+#   [auth]
+#   mode = "oauth"
+#
+#   [auth.oauth]
+#
+#   # The authorization server whose access tokens this trusts, spelled the way its
+#   # own `issuer` spells it. One, not a list: advertising a second whose tokens
+#   # this would then refuse presents to a person as a successful sign-in followed
+#   # by a permanent 401.
+#   issuer = "https://auth.example.com"
+#
+#   # What this server is called in a token's audience - the URL a person would
+#   # type, path included. A token minted for something else is refused here on its
+#   # audience, which reads as a credential problem and is a configuration one.
+#   resource = "https://sshwarden.example.com/mcp"
+#
+#   # What a client is told to ask for when a challenge carries no scope of its own.
+#   #
+#   # PUBLISHED UNAUTHENTICATED in the RFC 9728 document, so never a host, a path or
+#   # a tenant - a scope naming one tells anyone who asks that it exists. Keep them
+#   # coarse and let [[grant]] decide what a caller actually reaches.
+#   #
+#   # A scope here does NOT decide which tool runs. One MCP endpoint carries all
+#   # seven, so a scope required at the route is the intersection of what they all
+#   # need - and the scope named in the resulting 401 is what a client asks for, so
+#   # demanding a narrow one there stops a caller ever requesting the wider one
+#   # another tool needs.
+#   scopes_supported = ["ssh:read", "ssh:exec"]
+#
+#   # Off, and needed only when the authorization server is on a loopback or private
+#   # address - the same machine, or the same private network. Without it the fetch
+#   # of that server's metadata and signing keys is refused by the RFC 6890 check and
+#   # this process will not start.
+#   #
+#   # What it turns off is narrower than the same switch on an authorization server:
+#   # SshWarden makes no outbound request except this one, and the address comes from
+#   # the issuer written here rather than from anything a caller supplies. Turn it on
+#   # because the server really is on a private address, not to push through a fetch
+#   # that is failing for some other reason. It warns on every start.
+#   allow_private_issuer = false
+#
+# There is no client secret, deliberately: v0 does not introspect, because the only
+# introspection auth method the authorization server offers needs a long-lived one
+# and this project prefers a credential that expires. The cost is that a revocation
+# takes effect at the token's expiry rather than at once.
+#
+# This mode needs an adapter assembly, and the shipped host references SshWarden.OAuth
+# - the framework's bearer handler against whatever issuer you configure, so any
+# conformant authorization server works. SshWarden.Boltway fills the same seam with
+# Boltway's own reading of a token. A static-token deployment references neither and
+# never loads an authorization server's client libraries.
+#
+#   # Which claim carries what. The first two default to RFC 9068's names; the third
+#   # has no RFC, so name what your server emits - `gid` on Boltway, `sid` on a server
+#   # exposing its session id. If yours emits nothing of the kind, set it to `sub`
+#   # deliberately: that groups every session of one person together, which is coarser
+#   # than the audit record was designed for and is a choice you can see here rather
+#   # than one the library made quietly.
+#   client_id_claim = "client_id"
+#   token_id_claim  = "jti"
+#   grant_id_claim  = "gid"
+#
+# The [[grant]] rules below are unchanged and still decide everything: subject there
+# is matched against the `sub` an access token carries, not a display name.

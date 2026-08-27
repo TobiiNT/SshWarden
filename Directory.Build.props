@@ -1,0 +1,108 @@
+<Project>
+
+  <!--
+    Settings every project in SshWarden inherits.
+
+    Two of these are load-bearing rather than stylistic. This process holds SSH credentials into
+    somebody's production hosts and is reachable from the internet through a reverse proxy, so a
+    warning is a defect that has not been noticed yet:
+
+      TreatWarningsAsErrors   - the nullable-reference warnings are how "this is never null on the
+                                authenticated path" stays true. Downgraded to a warning, the next
+                                person's null check becomes optional.
+
+      EnforceCodeStyleInBuild - so the code-style analyzers run during the build rather than only
+                                in an editor, which is the difference between a rule and a
+                                suggestion. There is no .editorconfig here yet; when one arrives
+                                carrying banned APIs - the shape Boltway uses to keep a
+                                normalizing comparison out of a security decision - this is what
+                                makes those bans fail a build.
+  -->
+
+  <PropertyGroup>
+    <!--
+      0.0.1 and not 0.1.0: nothing here is finished. docs/DESIGN.md §7 locks v0 at eight steps and this
+      tree is at step 1, so the number says "started" rather than "a first usable release". It moves
+      when there is something a person could run against a real host.
+
+      Nothing in this repository has been published to nuget.org, and unlike the sentence that said
+      the same thing in Boltway - which was false when it was written - this one is checkable and was
+      checked: `curl https://api.nuget.org/v3-flatcontainer/sshwarden/index.json` answers 404, as do
+      the same queries for `sshwarden.mcp` and `sshwarden.server`. Measured 2026-08-26. Re-check
+      before believing it; a comment is a claim and the feed is the fact.
+    -->
+    <Version>0.0.1</Version>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <!--
+      net10.0 only, and the reason is narrower than it looks.
+
+      It is not `Base64Url` (that only forces net9) and it is not the MCP SDK
+      (`ModelContextProtocol.AspNetCore 2.2.0` ships lib/net8.0, net9.0 and net10.0). It is that
+      step 8 of docs/DESIGN.md §7 references `Boltway.Mcp`, whose own Directory.Build.props pins
+      net10.0 for its whole tree. Targeting anything lower here buys a framework this cannot
+      actually consume its own dependency on. docs/DESIGN.md §6.2 records the corrected reasoning.
+    -->
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <AnalysisLevel>latest-recommended</AnalysisLevel>
+
+    <!-- Reproducible output: "is the running binary the reviewed source" needs an answer for a
+         process that can run arbitrary commands on production hosts. -->
+    <Deterministic>true</Deterministic>
+    <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
+
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+
+    <!--
+      No culture data and no unmanaged ICU load. Nothing in this project formats a number, a date or
+      a currency for a person: the audit record is JSONL read by a log shipper, and every string
+      comparison here is Ordinal or OrdinalIgnoreCase by rule - host globs, scope names, tool names
+      and config keys are all matched character-for-character.
+
+      Timestamps are the one thing that could have wanted culture and do not: they are written
+      round-trip ISO 8601 with an offset, which is invariant by definition.
+    -->
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <PropertyGroup Label="Package metadata">
+    <Authors>Tobii (Truong To)</Authors>
+    <Product>SshWarden</Product>
+    <Copyright>Copyright © 2026 Tobii (Truong To)</Copyright>
+
+    <!--
+      Apache-2.0 rather than MIT, matching Boltway, and for the reason docs/DESIGN.md §3.3 gives: the
+      patent grant is what makes this adoptable inside a company. Rev 5 of the handoff said MIT in
+      one section and Apache-2.0 in two others; Apache-2.0 is the one that survived.
+    -->
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/TobiiNT/SshWarden</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/TobiiNT/SshWarden</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+  </PropertyGroup>
+
+  <!--
+    Nothing here packs yet.
+
+    docs/DESIGN.md §3.3 makes this a self-hosted deployable rather than a platform, so the thing a user
+    installs is the server, not a library reference. The naming table in §0 does reserve `SshWarden`
+    and `SshWarden.Mcp` as package ids, and they may earn a nuspec later - but publishing an id is
+    the one decision that cannot be taken back, and there is no consumer for one today.
+
+    Set IsPackable per-project, deliberately, in the change that first has a reason to.
+  -->
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+</Project>

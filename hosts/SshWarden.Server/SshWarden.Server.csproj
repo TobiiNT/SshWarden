@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <RootNamespace>SshWarden.Server</RootNamespace>
+    <Description>The SshWarden deployable.</Description>
+    <UserSecretsId>sshwarden-server</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/SshWarden.Mcp/SshWarden.Mcp.csproj" />
+    <!--
+      The generic adapter, not the Boltway one. This host is what somebody runs; wiring it to one
+      sibling project's packages made "does it work with my authorization server" answerable only by
+      editing this file. SshWarden.Boltway still ships and still fills the same seam - a deployment
+      that wants Boltway's own reading of a token references it and calls AddSshWardenBoltway
+      instead, and nothing here has to change for a third implementation.
+    -->
+    <ProjectReference Include="../../src/SshWarden.OAuth/SshWarden.OAuth.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="SshWarden.Mcp.Tests" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,49 @@
+# What keeps a pin from becoming a fossil.
+#
+# Every action in `.github/workflows/` names a commit sha rather than a tag, because a tag is a
+# mutable pointer in somebody else's repository. That is the same argument `Directory.Packages.props`
+# makes about floating a NuGet version, applied to a dependency that appears in no lockfile at all.
+#
+# **A pin without this file is the other failure, not the absence of one.** A sha nobody moves is a
+# workflow running old code, including whatever was fixed in it since. Dependabot rewrites the sha
+# and the trailing `# vX.Y.Z` comment together, which is why the pins are written in that exact
+# form: the comment is what makes a diff of forty hex characters reviewable, and it stays true
+# because the same tool moves both halves.
+
+version: 2
+
+updates:
+  # The actions, grouped into one pull request.
+  #
+  # Nobody has an opinion about actions/checkout 7.0.1 versus 7.0.2 in isolation, and one pull
+  # request per action per week is a notification that gets closed unread. One a week is a review
+  # somebody actually does.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      actions:
+        patterns: ['*']
+    commit-message:
+      prefix: ci
+
+  # The packages, not grouped.
+  #
+  # `Directory.Packages.props` pins every version exactly, and the two Boltway packages carry a
+  # comment saying a range "would let a consumer's restore pick a version this was never built
+  # against". A grouped pull request turns that into one accept-or-reject over the lot; separate
+  # ones make each bump a diff somebody looked at, which is what the pinning was for.
+  #
+  # This is a server that opens shells on other people's hosts. A silent bump to the token handling
+  # or the SSH library is a different security posture than the one that was reviewed.
+  - package-ecosystem: nuget
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 10
+    commit-message:
+      prefix: deps

@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>SshWarden.Ssh.IntegrationTests</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="Microsoft.AspNetCore.TestHost" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+  </ItemGroup>
+
+  <!--
+    The MCP layer is referenced here as well as the SSH one, because the tests worth having at this
+    level are the ones that go the whole way: a tool call arriving over HTTP, a command running on a
+    real server, and the line that lands in the audit log. Each half is covered on its own
+    elsewhere; what only this suite can check is what happens between them.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="../../src/SshWarden/SshWarden.csproj" />
+    <ProjectReference Include="../../src/SshWarden.Mcp/SshWarden.Mcp.csproj" />
+  </ItemGroup>
+
+</Project>

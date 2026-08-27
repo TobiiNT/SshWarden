@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>SshWarden.OAuth</RootNamespace>
+  </PropertyGroup>
+
+  <!--
+    OAuth 2.1 for any authorization server, which is the whole reason this exists beside
+    SshWarden.Boltway.
+
+    Boltway was the first implementation and it is a fine one, but it is a sibling project: a
+    deployment on Keycloak, Entra, Auth0 or anything else was told, by the error message this
+    package's absence produced, to install another project's NuGet packages. For a server whose
+    selling point is that it validates somebody else's tokens, "works with one authorization server"
+    is the wrong answer.
+
+    So: Microsoft.AspNetCore.Authentication.JwtBearer, which every .NET reader already knows, doing
+    OpenID Connect discovery against the configured issuer. What it does not do is RFC 9728 - that
+    document is the resource server's own, not the authorization server's, and it is sixty lines
+    written here rather than a dependency.
+
+    SshWarden.Boltway stays for a deployment that wants Boltway's own reading of a token, and
+    nothing in this repository requires either one: both fill ISshWardenAuthenticator, which is the
+    seam, and a deployment picks one or writes a third.
+  -->
+
+  <ItemGroup>
+    <ProjectReference Include="../SshWarden.Mcp/SshWarden.Mcp.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
+  </ItemGroup>
+
+</Project>
