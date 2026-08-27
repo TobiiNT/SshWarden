@@ -84,11 +84,17 @@ services:
       # which turns a routine `docker compose pull && up -d` into a running job nobody can reach and
       # an audit trail with a hole in it.
       #
-      # A named volume rather than a bind mount, because a bind mount would land the uid problem
-      # above on a directory this process has to *write*, where getting it wrong fails at startup
-      # anyway: the audit path is checked for writability before the server starts, deliberately,
-      # since a choke point that runs commands it cannot record is worse than one that is not
-      # running.
+      # A named volume, and the reason first written here was incomplete enough to be wrong. It said
+      # a bind mount would land the ownership problem above on a directory this process has to
+      # *write* - true, but a named volume mounted at a path the image does not have starts owned by
+      # root and lands the same problem, as exit 78 on the first start. What actually makes this work
+      # is that the Dockerfile creates /var/log/sshwarden owned by the image's own uid, so volume
+      # initialisation copies that ownership rather than inventing root's.
+      #
+      # Swap it for a bind mount when a log shipper has to read the audit log. That log is the source
+      # of truth for every call this server allowed or refused, and a file inside a named volume is
+      # one nobody can tail without knowing where Docker put it. The README's install block has the
+      # chown that needs.
       - state:/var/log/sshwarden
 
     # No `healthcheck:` here, and its absence is a decision rather than an oversight. `/health`

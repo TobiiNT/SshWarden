@@ -35,6 +35,21 @@ FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 WORKDIR /app
 COPY --from=build /app .
 
+# The state directory, created here rather than left to the runtime, and this is load-bearing for
+# `deploy/compose.yaml`.
+#
+# A named volume mounted at a path the image does not have starts owned by root, and the process
+# below is not root - so the audit log and the job registry would be unwritable. That is not a
+# subtle failure: the audit path is checked for writability before anything is served, deliberately,
+# because a choke point that runs commands it cannot record is worse than one that is not running.
+# The container would exit 78 on every start. Creating the directory with the right owner first
+# means Docker's volume initialisation copies that ownership rather than inventing root's.
+#
+# Reasoned from how volume initialisation works, not measured: this was written without a daemon.
+# What removes the risk is that the shipped compose file works either way, and the README's install
+# block does not depend on this line being right.
+RUN mkdir -p /var/log/sshwarden && chown $APP_UID:$APP_UID /var/log/sshwarden
+
 # Not root. This process opens SSH connections to production hosts; the blast radius of a container
 # escape should not also be a root shell in the container.
 USER $APP_UID
