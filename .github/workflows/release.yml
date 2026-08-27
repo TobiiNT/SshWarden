@@ -1,0 +1,221 @@
+# Cut a tag, and give the image already in the registry that name.
+#
+# Until this existed, a release was a tag somebody pushed from their own checkout, which needs a
+# credential, a clean tree, and the discipline to type the version twice. Nothing checked either
+# typing. This does it from a form and checks both.
+#
+# WHAT THIS DOES NOT DO, AND WHY
+# ------------------------------
+# **It does not build.** `ci.yml` pushes `ghcr.io/<owner>/<repo>:<sha>` on every push to main, and
+# this adds a second name to that same manifest by digest, so the versioned tag is the *same bytes*
+# CI built and tested. A rebuild here would be a second image from the same tree, which is not the
+# same claim and is one `docker build` away from not being the same image.
+#
+# **It does not publish a package.** Nothing in this repository packs: `IsPackable` is false for the
+# whole tree and Directory.Build.props says why. The day something packs, that step goes here.
+#
+# **It does not write a release page.** There is no CHANGELOG.md to fill one from, and a release
+# page whose body is empty is worse than the tags list, which at least does not pretend. The
+# annotated tag carries the message somebody typed. Worth adding the day there is a changelog.
+#
+# THE TRAP THIS IS SHAPED AROUND
+# ------------------------------
+# A tag pushed with `GITHUB_TOKEN` does not start another workflow. GitHub blocks that on purpose,
+# to stop a workflow triggering itself forever, and the consequence is silent: the obvious design,
+# "cut the tag and let something else notice it", produces a green run, a tag in the repository, and
+# nothing else. Nothing reports it. So the work that follows the tag is a job in this file behind
+# `needs:`, not a second workflow with a `push: tags` trigger. Boltway paid for that one.
+
+name: release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to cut, e.g. v0.1.0. Must start with v.'
+        required: true
+        type: string
+      message:
+        description: 'What this release contains. Becomes the annotated tag message.'
+        required: false
+        type: string
+      ref:
+        description: 'What to tag. Defaults to the branch this was dispatched on.'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+
+    # A clone, four checks and a `git push`. Anything past ten minutes is a hung fetch rather than a
+    # slow one, and the default ceiling of 360 would hold a release for six hours before saying so.
+    timeout-minutes: 10
+
+    permissions:
+      # The only write in this file that cannot be undone, and it writes exactly one ref.
+      contents: write
+
+      # For the registry check at the end of the step below, which is why this job holds a package
+      # grant at all. `read`, not `write`: this job looks, and the job after it writes.
+      packages: read
+
+    outputs:
+      sha: ${{ steps.cut.outputs.sha }}
+
+    steps:
+      # Pinned to a commit rather than a tag, for the reason `.github/dependabot.yml` sets out in
+      # full: a tag is a mutable pointer in somebody else's repository, and this job holds
+      # `contents: write` on this one.
+      #
+      # Full history and every tag, because the existence check below is worthless against a shallow
+      # clone that fetched none. It would pass by seeing nothing rather than by finding nothing.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.ref || github.ref }}
+
+      # Only reached on the last check in the step below, and placed here because a login is not
+      # something to do halfway through a script. The token is this run's own and read is all it
+      # needs.
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Everything that can be checked is checked before the one line that cannot be taken back.
+      # That ordering is the whole design of this step: a tag that has been pushed is what somebody
+      # will resolve a version through later, and there is no version of "undo" that helps them.
+      - name: Cut it
+        id: cut
+        env:
+          TAG: ${{ inputs.tag }}
+          MESSAGE: ${{ inputs.message }}
+        run: |
+          set -euo pipefail
+
+          # `v*` because that is what every document here calls a release tag, and a tag that does
+          # not match is a name nobody will look for later.
+          case "$TAG" in
+            v*) ;;
+            *) echo "::error::'$TAG' does not start with 'v'."; exit 1 ;;
+          esac
+
+          # Refuse rather than move. Moving a tag leaves nothing connecting the version somebody
+          # resolved to the tree it came from, and the image already carrying that name does not
+          # stop existing. Cutting another tag is cheap; this is not.
+          if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+            echo "::error::$TAG already exists. Tags are never moved here, so cut another."
+            exit 1
+          fi
+
+          # The tag names a version, and nothing else checks that it names *this* one.
+          # Directory.Build.props holds the single literal every assembly is built with, so the tag
+          # is purely derivative of it - which makes this an equality check rather than a judgement.
+          #
+          # Without it, dispatching v0.1.0 against a tree still reading 0.0.1 cuts the tag, ships an
+          # image whose assemblies all say 0.0.1, and reports success.
+          VERSION="$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' Directory.Build.props | head -1)"
+          if [ -z "$VERSION" ]; then
+            echo "::error::No <Version> in Directory.Build.props, so $TAG cannot be checked against it."
+            exit 1
+          fi
+          if [ "$TAG" != "v$VERSION" ]; then
+            echo "::error::$TAG names a release of $VERSION. Bump <Version> in Directory.Build.props,"
+            echo "::error::or cut v$VERSION - shipping $VERSION under $TAG leaves the tag pointing at"
+            echo "::error::assemblies that do not carry its number."
+            exit 1
+          fi
+
+          SHA="$(git rev-parse HEAD)"
+
+          # **The image is checked before the tag is cut, not after.** The `images` job below only
+          # adds a name to a manifest that is already in the registry, and if it is not there that
+          # job fails - after this one has pushed a tag that can never be moved. So the failure is
+          # brought forward to the last moment everything is still free.
+          #
+          # Both causes are named because the cures are opposite: a run still going wants waiting,
+          # and a commit that was never on main wants a different ref. `ci.yml` pushes only from
+          # main, so tagging a branch tip produces exactly this message.
+          IMAGE="$(echo "ghcr.io/${{ github.repository }}" | tr '[:upper:]' '[:lower:]')"
+          docker buildx imagetools inspect "$IMAGE:$SHA" >/dev/null 2>&1 || {
+            echo "::error::$IMAGE:$SHA is not in the registry, so there is nothing for this release to"
+            echo "::error::name. Either the image job on main is still running for this commit - wait"
+            echo "::error::for it - or $SHA was never on main, and only main pushes images. If a run"
+            echo "::error::was cancelled and stranded this commit, dispatch ci from main with"
+            echo "::error::ref=$SHA to rebuild it."
+            exit 1
+          }
+
+          # Annotated, not lightweight: it carries a message, an author and a date, so "what was in
+          # this release and who cut it" survives without a release note somewhere else. An empty
+          # input still gets a message, because `git tag -a -m ''` is refused.
+          git -c user.name='github-actions[bot]' \
+              -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+              tag -a "$TAG" "$SHA" \
+              -m "${MESSAGE:-$TAG}"
+
+          git push origin "refs/tags/$TAG"
+
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          echo "Cut $TAG at $SHA" >> "$GITHUB_STEP_SUMMARY"
+
+  # The image already exists; this only gives it the release's name.
+  #
+  # Re-tagged by digest rather than rebuilt: `imagetools create` adds a name to a manifest already in
+  # the registry, so `<image>:v0.1.0` and the `:<sha>` it was made from resolve to one manifest.
+  #
+  # **No provenance attestation here, and its absence is the design rather than an omission.** The
+  # `image` job in ci.yml attests what it pushed and binds that statement to the digest rather than
+  # to any tag, precisely so adding a name later cannot invalidate it. One manifest, one attestation,
+  # covering both names. A second one minted here would describe the same digest twice and would need
+  # `id-token: write` in a job with no other use for one.
+  #
+  # If this job ever starts *building* rather than re-tagging, that stops being true in the same
+  # commit: a new build is a new digest, and a new digest has no provenance until something says so.
+  images:
+    needs: tag
+    runs-on: ubuntu-latest
+
+    # One registry write against a manifest that already exists. No build, no bytes pushed.
+    timeout-minutes: 10
+
+    permissions:
+      contents: read
+      packages: write
+
+    # No checkout. Nothing here reads the tree: the sha comes from the job above and the image name
+    # comes from `github.repository`, derived the same way ci.yml derives it.
+    steps:
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Name the image after the release
+        env:
+          TAG: ${{ inputs.tag }}
+          SHA: ${{ needs.tag.outputs.sha }}
+        run: |
+          set -euo pipefail
+
+          IMAGE="$(echo "ghcr.io/${{ github.repository }}" | tr '[:upper:]' '[:lower:]')"
+
+          # Checked again rather than assumed. The job above verified this minutes ago and then
+          # pushed a tag, so if the answer changed in between, the useful thing is a message saying
+          # which image is missing rather than whatever `imagetools create` says about a manifest it
+          # cannot resolve.
+          docker buildx imagetools inspect "$IMAGE:$SHA" >/dev/null 2>&1 || {
+            echo "::error::$IMAGE:$SHA is not in the registry. $TAG is already cut and points at $SHA,"
+            echo "::error::so re-run this job once the image is there; do not cut another tag."
+            exit 1
+          }
+
+          docker buildx imagetools create --tag "$IMAGE:$TAG" "$IMAGE:$SHA"
+
+          echo "$IMAGE:$TAG -> $SHA" >> "$GITHUB_STEP_SUMMARY"

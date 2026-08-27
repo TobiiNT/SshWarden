@@ -16,25 +16,46 @@ on:
   pull_request:
   push:
     branches: [main]
-  workflow_dispatch:
 
-# Read, and nothing else. Nothing here publishes: the image is built and thrown away, because what
-# is being checked is that the Dockerfile is buildable, not that a registry has a copy. A job with
-# no credential is a job that cannot leak one, and this repository's whole subject is credentials.
+  # Rebuilding one commit's image by hand. The concurrency rule below makes this rare rather than
+  # impossible: a run cancelled by hand, or one that died on a transient registry error, still leaves
+  # a commit on main with no `ghcr.io/...:<sha>`, and `release.yml` refuses to tag an image that is
+  # not in the registry. Without this input that commit cannot be released at all, and the only route
+  # back is a fresh commit - which is what it cost Boltway.
+  #
+  # `ref` takes a sha and not only a branch, because the stranded commit is by definition not the
+  # branch head any more. Dispatch it from main: the push condition inside the job reads
+  # `github.ref`, which is the branch dispatched from, so an older commit built from main still
+  # pushes and one built from anywhere else still does not.
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Commit or branch to build. Empty means the branch this was dispatched on.'
+        required: false
+        type: string
+
+# Read at the top, and the one job that needs more asks for it itself. On a pull request nothing
+# here holds a registry credential: the image is built and thrown away, because what a pull request
+# checks is that the Dockerfile is buildable, not that a registry has a copy. On main the `image`
+# job pushes, and it widens its own grants rather than everybody's - a job with no credential is a
+# job that cannot leak one, and this repository's whole subject is credentials.
 permissions:
   contents: read
 
 # A second push to the same branch makes the first run's answer worthless, and a queue of superseded
 # runs is how a red that mattered gets scrolled past.
 #
-# Cancelling on main too, which is safe only because nothing here produces a per-commit artifact:
-# the image is discarded, so a cancelled run on main leaves nothing missing. **The day a job pushes
-# an image tagged by sha, that stops being true** - a superseded branch tip is a fine thing to
-# cancel, and a commit that is permanently addressable is not. Boltway learned that by making a
-# commit unreleasable; change this line in the same edit that adds the push.
+# **Not on main, and this is the edit the previous version of this comment asked for.** It used to
+# cancel everywhere, which was safe only while nothing here produced a per-commit artefact. Now the
+# `image` job below is the only thing that ever builds and pushes this commit's container image, and
+# every push to main is a commit that stays permanently addressable. Two merges in quick succession
+# would cancel the first one's `image` job, and that commit would have no `ghcr.io/...:<sha>` - not
+# late, never - which `release.yml` then refuses to tag. Superseded is a property of a branch tip; it
+# is not a property of a commit already on main that may still be released. Boltway made a commit
+# unreleasable exactly this way.
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   # The one rule in CLAUDE.md that a machine can settle, settled by one. It ran nowhere until now,
@@ -145,20 +166,155 @@ jobs:
 
     # No `needs: test`. The two answer different questions and a broken Dockerfile is worth knowing
     # about on the same run as a broken test rather than on the one after it.
+    #
+    # Which does mean main can push an image built from a commit whose tests are red, and that is
+    # deliberate: `:<sha>` is an identity, not an endorsement, and nothing deploys from it on its
+    # own - a release is a `release.yml` dispatch somebody types. Making the push wait on the tests
+    # would buy nothing and would delay the Dockerfile answer by the length of the test run on every
+    # red branch.
     timeout-minutes: 15
 
     permissions:
       contents: read
 
+      # Everything below `contents: read` is reached only on main, where the push and the attestation
+      # run. A pull request uses none of it: the grants sit on the job because that is the only place
+      # a workflow can put them, and every step that needs one is behind the same
+      # `if: github.ref == 'refs/heads/main'`.
+      packages: write
+
+      # **`id-token: write` in a job that runs `docker build` is a real widening, taken on purpose.**
+      # Everything in the build context is this repository's own code, but a build step can run
+      # arbitrary commands, and this token is one an attacker who got a command in there could mint.
+      #
+      # What it buys is the only claim here a consumer can check without trusting the registry: a
+      # signed statement that these exact bytes came out of this workflow at this commit. This is a
+      # server people hand SSH access to their production hosts, so "is the image I pulled the image
+      # this repository built" should not resolve to "ask whoever can write to ghcr".
+      id-token: write
+      attestations: write
+
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Empty on push and on pull_request; a sha only on the dispatch that exists to rebuild an
+          # image a cancelled run never produced. The default shallow checkout is still enough there,
+          # because `actions/checkout` fetches a sha it is handed directly and nothing here counts
+          # commits.
+          ref: ${{ inputs.ref }}
 
-      # Built and discarded - no `push`, no registry login, no credential. What this checks is that
-      # the Dockerfile's restore-layer copy list still names every project the host references,
-      # which nothing else can check: `dotnet restore` skips a project file it cannot find and
-      # reports success, and the real failure lands two layers later as a missing assets file.
+      # Only on main. A pull request needs the build, not the credential.
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        if: github.ref == 'refs/heads/main'
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Built on every run, pushed only on main. What the build alone checks is that the Dockerfile's
+      # restore-layer copy list still names every project the host references, which nothing else
+      # can check: `dotnet restore` skips a project file it cannot find and reports success, and the
+      # real failure lands two layers later as a missing assets file.
       #
       # From the repository root, because the build needs Directory.Build.props and
       # Directory.Packages.props above the Dockerfile's own directory.
       - name: Build the image
-        run: docker build -f hosts/SshWarden.Server/Dockerfile -t sshwarden:${{ github.sha }} .
+        run: |
+          set -euo pipefail
+
+          # Derived from the repository rather than written out. There is no second copy to drift,
+          # and `release.yml` derives the same name the same way from the same value rather than
+          # holding a list - a hand-written copy is where two things stop being identical, and the
+          # drift would be silent in the worst way: an image built and pushed on every commit that
+          # simply never receives a version tag.
+          #
+          # Lowercased because a registry will not take a capital and the owner here has two.
+          IMAGE="$(echo "ghcr.io/${{ github.repository }}" | tr '[:upper:]' '[:lower:]')"
+          echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
+
+          # The sha of what was checked out, not `github.sha`. They are the same value on push and on
+          # pull_request, and they are not on the dispatch that rebuilds a stranded commit: there
+          # `github.sha` is the head of the branch dispatched from and the tree being built is older.
+          # Tagging that image with the branch head's sha would put the wrong bytes behind the one
+          # name a deployment is supposed to pin, which is worse than the missing image this path
+          # exists to fix.
+          SHA="$(git rev-parse HEAD)"
+          echo "SHA=$SHA" >> "$GITHUB_ENV"
+
+          # Two tags on one build. The sha is the identity a deployment should name, because `latest`
+          # moves under a running host and makes "which build is serving" unanswerable. `latest`
+          # exists anyway, for a first deploy that has no sha to name yet.
+          docker build \
+            -f hosts/SshWarden.Server/Dockerfile \
+            -t "$IMAGE:$SHA" \
+            -t "$IMAGE:latest" \
+            .
+
+      - name: Push
+        if: github.ref == 'refs/heads/main'
+        run: |
+          set -euo pipefail
+
+          docker push "$IMAGE:$SHA"
+
+          # `latest` moves only when this run built the branch head. A dispatched rebuild exists to
+          # restore an older commit's missing `:<sha>`, and that commit is by definition one main has
+          # moved past: putting `latest` back on it would send every compose file naming `latest`
+          # backwards on the next pull, silently, for a tag nobody re-reads. `:<sha>` is the identity
+          # of a commit and is safe to write at any time; this one is a pointer, and a pointer is
+          # only correct in one direction.
+          if [ "$SHA" = "${{ github.sha }}" ]; then
+            docker push "$IMAGE:latest"
+          else
+            echo "::notice::not moving :latest - this run rebuilt $SHA, and the branch head is ${{ github.sha }}."
+          fi
+
+          # The digest, which is what the attestation below binds to.
+          #
+          # **A tag is not an identity, and that is the whole reason this reads one back.** Everything
+          # said about `latest` moving applies to `:$SHA` too: a tag is a pointer anybody with
+          # registry write access can repoint, and an attestation naming a tag would claim only that
+          # "something called this name was built here". `sha256:...` is the content, so the statement
+          # survives anybody renaming, retagging or overwriting.
+          #
+          # Read back after the push rather than out of the build, so this reports what the registry
+          # accepted rather than what was sent to it.
+          DIGEST="$(docker inspect --format='{{range .RepoDigests}}{{println .}}{{end}}' "$IMAGE:$SHA" \
+            | grep "^$IMAGE@" | head -1 | cut -d@ -f2)"
+
+          # An empty or malformed digest would make the next step attest nothing, or attest the wrong
+          # subject, and both are worse than a red build: a provenance record that does not match the
+          # artefact is a claim a consumer will act on.
+          case "$DIGEST" in
+            sha256:*) ;;
+            *)
+              echo "::error::could not read a digest for $IMAGE:$SHA after pushing it (got '$DIGEST')."
+              echo "::error::The attestation binds to the digest rather than the tag, so there is"
+              echo "::error::nothing safe to sign without it."
+              exit 1
+              ;;
+          esac
+
+          echo "DIGEST=$DIGEST" >> "$GITHUB_ENV"
+          echo "pushed $IMAGE:$SHA" >> "$GITHUB_STEP_SUMMARY"
+
+      # Provenance: a signed statement of what built this image, from where, at which commit. A
+      # consumer runs `gh attestation verify oci://<image>:<sha> --repo ${{ github.repository }}` and
+      # gets an answer from a transparency log, offline of these logs and of anything somebody with
+      # registry access could rewrite. Before this, "is the image in the registry what this
+      # repository's main branch built" was answerable only by trusting the registry.
+      #
+      # It runs only where the push ran, and for the same reason: a pull request builds the image to
+      # prove the Dockerfile still works, and there is nothing in a registry to make a statement
+      # about. The `if` matches the push step's exactly; if one ever changes, the other is wrong.
+      - name: Attest
+        if: github.ref == 'refs/heads/main'
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ env.DIGEST }}
+
+          # The attestation goes to the registry too, beside the image, so a puller who never comes
+          # to GitHub can still verify it. Only reachable because the login step ran, which is
+          # main-only exactly like this step.
+          push-to-registry: true
