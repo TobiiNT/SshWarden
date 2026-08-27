@@ -43,9 +43,21 @@ USER $APP_UID
 # readable by anybody who can pull the image.
 ENV SSHWARDEN_CONFIG=/etc/sshwarden/sshwarden.toml
 
-# Matches the default in the example config. The container has its own network namespace, so
-# loopback here means "reachable only through whatever the runtime publishes", which is the
-# reverse-proxy shape the README describes.
+# The number the example config's default names. EXPOSE is documentation and publishes nothing.
+#
+# **The config decides the bind address, and in a container the shipped default is the wrong one.**
+# This process binds exactly what `server.listen` says, and that default is `127.0.0.1:8760` - a
+# loopback belonging to this container's network namespace, which is not the host's. A published port
+# forwards to this container's address rather than to that loopback, so the default answers nothing
+# from outside. `deploy/compose.yaml` sets `0.0.0.0:8760` and pins the host half of the mapping to
+# loopback instead, which puts the boundary back where the default was trying to put it.
+#
+# Reasoned rather than measured: the forwarding half was not reproducible without a daemon, and
+# Docker's networking documentation does not state it either way (looked, 2026-08-27). This comment
+# previously asserted the opposite, that the default was already the reverse-proxy shape, which would
+# send a reader to debug a connection that cannot work. Both readings are safe under
+# `deploy/compose.yaml`, which is why that file sets the address explicitly rather than relying on
+# either.
 EXPOSE 8760
 
 ENTRYPOINT ["dotnet", "SshWarden.Server.dll"]
