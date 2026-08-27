@@ -149,17 +149,19 @@ defect nobody has noticed yet.
 
 The audience is a stranger reading under time pressure, often during an incident.
 
-- **No em-dashes (U+2014).** Use a comma, a colon, a full stop, or ` - `. This is not a new rule so
-  much as one the code already kept: there was never an em-dash in any `.cs` file here, only in the
-  markdown, so this extends the code's own convention rather than inventing one. It is checkable:
+- **No em-dashes (U+2014).** Use a comma, a colon, a full stop, or ` - `. It applies to strings as
+  well as prose here, which is stricter than it sounds: this repository has never had one in a
+  literal, and its messages are matched character for character by tests. `ci.yml`'s `prose` job
+  runs the check, over tracked files so `bin/` and `obj/` cannot be scanned:
 
   ```bash
-  LC_ALL=C.UTF-8 grep -rnP '\x{2014}' .    # expected: no output
+  git ls-files -z | xargs -0 env LC_ALL=C.UTF-8 grep -nIP '\x{2014}'   # finding one is the failure
   ```
 
-  The locale is not decoration. Without it GNU grep reads the pattern as bytes and answers
+  `LC_ALL` is not decoration: without it GNU grep reads the pattern as bytes and answers
   `character code point value in \x{} or \o{} is too large`, which looks like a broken command
-  rather than a passing check. Measured on this machine, 2026-08-27.
+  rather than a passing check.
+
 - **English everywhere**, and not as a preference: identifiers, comments, commit messages, log lines,
   and anything compared character for character. Two implementations must not diverge on a
   translation.
