@@ -191,6 +191,11 @@ jobs:
       # signed statement that these exact bytes came out of this workflow at this commit. This is a
       # server people hand SSH access to their production hosts, so "is the image I pulled the image
       # this repository built" should not resolve to "ask whoever can write to ghcr".
+      #
+      # **Both buy nothing at all while this repository is private**, because the *Attest* step below
+      # cannot run there. They stay anyway, so that making the repository public is one setting
+      # rather than a setting plus a workflow edit somebody has to know to make - a grant that has to
+      # be remembered later is one that gets remembered as a failed release.
       id-token: write
       attestations: write
 
@@ -298,17 +303,41 @@ jobs:
           echo "DIGEST=$DIGEST" >> "$GITHUB_ENV"
           echo "pushed $IMAGE:$SHA" >> "$GITHUB_STEP_SUMMARY"
 
+          # Said out loud in the log of the run that pushed it, not only in a comment. A workflow
+          # with an *Attest* step in it reads as a workflow that attests, and the step below is
+          # skipped rather than failed while this repository is private - which is the quiet kind of
+          # wrong: somebody pulls this image believing there is a signed statement behind it. The
+          # notice is attached to the specific build, which is where that belief gets formed.
+          if [ "${{ github.event.repository.visibility }}" != "public" ]; then
+            echo "::notice::$IMAGE:$SHA is NOT attested. GitHub does not persist attestations for"
+            echo "::notice::user-owned private repositories, so provenance starts with the first"
+            echo "::notice::image pushed after this repository is public."
+          fi
+
       # Provenance: a signed statement of what built this image, from where, at which commit. A
       # consumer runs `gh attestation verify oci://<image>:<sha> --repo ${{ github.repository }}` and
       # gets an answer from a transparency log, offline of these logs and of anything somebody with
       # registry access could rewrite. Before this, "is the image in the registry what this
       # repository's main branch built" was answerable only by trusting the registry.
       #
-      # It runs only where the push ran, and for the same reason: a pull request builds the image to
-      # prove the Dockerfile still works, and there is nothing in a registry to make a statement
-      # about. The `if` matches the push step's exactly; if one ever changes, the other is wrong.
+      # On main, for the same reason the push is: a pull request builds the image to prove the
+      # Dockerfile still works, and there is nothing in a registry to make a statement about.
+      #
+      # **And only while the repository is public, which is measured rather than assumed.** The first
+      # push this workflow ever made, on 2026-08-27, pushed the image and then failed here with
+      # `Failed to persist attestation: Feature not available for user-owned private repositories`.
+      # So this is a property of the account and the visibility, not of anything in this file: the
+      # grants above are correct, the digest is correct, and there is simply nowhere to persist the
+      # statement. Skipped rather than tolerated with `continue-on-error`, because a step that is
+      # allowed to fail is a step nobody reads again - and the *Push* step above says in the log that
+      # the image it just pushed carries no provenance.
+      #
+      # The condition reads the event's repository rather than a hardcoded name, so the day this
+      # repository goes public the next push attests with no edit here. If the payload ever lacks
+      # that field the comparison is false and the step is skipped, which is the safe direction: a
+      # missing attestation is visible, a wrongly-claimed one is not.
       - name: Attest
-        if: github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/main' && github.event.repository.visibility == 'public'
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-name: ${{ env.IMAGE }}

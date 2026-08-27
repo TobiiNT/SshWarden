@@ -175,6 +175,12 @@ jobs:
   # covering both names. A second one minted here would describe the same digest twice and would need
   # `id-token: write` in a job with no other use for one.
   #
+  # While this repository is private that attestation does not exist at all: GitHub refuses to
+  # persist one for a user-owned private repository, measured 2026-08-27 on the first push this
+  # workflow's sibling ever made. That changes nothing here. Re-tagging by digest is right whether or
+  # not a statement is bound to it, and once the repository is public the release tag inherits the
+  # attestation ci.yml minted, with no edit to this file.
+  #
   # If this job ever starts *building* rather than re-tagging, that stops being true in the same
   # commit: a new build is a new digest, and a new digest has no provenance until something says so.
   images:
