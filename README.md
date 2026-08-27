@@ -95,9 +95,39 @@ with the reasoning beside each one.
 That is the shape for trying this out. For a machine that keeps running it there are two files under
 [`deploy/`](deploy/), and what separates them is what a supervisor does when this process exits.
 
+From a checkout of this repository, which is where `deploy/compose.yaml` lives:
+
 ```bash
+IMAGE=ghcr.io/tobiint/sshwarden:latest
+sudo install -d -m 700 /etc/sshwarden
+
+# The key this process reaches your hosts with, and each host's fingerprint read over a channel you
+# trust. `init` will not scan for the fingerprint, deliberately: one read off the network is one
+# verified by whoever answered.
+sudo ssh-keygen -t ed25519 -f /etc/sshwarden/id_ed25519 -N ''
+ssh-keyscan -t ed25519 prod-web-1 | ssh-keygen -lf -
+
+# Ask the image which uid it runs as rather than assuming a number, then hand it the files it has to
+# read. A bind mount keeps the host's owner, and startup refuses a config or a key it cannot open.
+APP_UID=$(docker run --rm --entrypoint id "$IMAGE" -u)
+sudo chown -R "$APP_UID:$APP_UID" /etc/sshwarden
+
+# The config, written by the image so it lands owned by that uid already, at 0600, with the bearer
+# token printed once. 0.0.0.0 because a published port does not reach the container's loopback.
+docker run --rm -v /etc/sshwarden:/etc/sshwarden "$IMAGE" init \
+  --config /etc/sshwarden/sshwarden.toml \
+  --identity-file /etc/sshwarden/id_ed25519 \
+  --host prod-web-1=SHA256:the-fingerprint-you-just-read \
+  --ssh-user deploy \
+  --listen 0.0.0.0:8760
+
 docker compose -f deploy/compose.yaml up -d
+curl -s http://127.0.0.1:8760/health        # {"ok":true,"server":"sshwarden"}
 ```
+
+Then narrow the generated rules before this reaches anything real. `init` says so too: what it writes
+grants more than a first deployment needs, because a starting point that refuses everything teaches
+nobody which line to change.
 
 Every push to main publishes `ghcr.io/tobiint/sshwarden` at the commit sha and at `latest`. Deploy
 once from `latest`, then pin the sha you got: `latest` moves under a running host, which makes
