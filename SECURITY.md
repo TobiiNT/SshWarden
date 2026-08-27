@@ -18,7 +18,7 @@ What helps, roughly in order:
   does not name" and "no credential reaches anything" are different reports.
 
 You will get an acknowledgement within a week. That is a real limit rather than a promise dressed
-up as one — if a week passes in silence, send a reminder.
+up as one - if a week passes in silence, send a reminder.
 
 **Supported versions:** `main`, and nothing else. There is no release yet and no branch carrying
 backports.
@@ -27,7 +27,7 @@ backports.
 
 Everything under `src/` and `hosts/`. Worth your time, roughly in order of what a defect costs:
 
-- **The grant table** — `(subject + scope) → which SSH user, on which hosts, for which tools, with
+- **The grant table** - `(subject + scope) → which SSH user, on which hosts, for which tools, with
   which arguments`. Reaching a host, path, unit or tool that no matching rule names is the sharpest
   report this project can get. So is a rule matching a subject it should not.
 - **The arguments around `cmd`.** `cmd` is the caller's to write and is deliberately ungated.
@@ -36,13 +36,13 @@ Everything under `src/` and `hosts/`. Worth your time, roughly in order of what 
   vulnerability.
 - **The job identifier gate.** Polling or cancelling a job belonging to someone else. The refusal is
   deliberately indistinguishable from "no such job"; if it is distinguishable, say so.
-- **Host key verification** — a connection completing against a fingerprint that does not match.
-- **Both authentication modes** — static-token comparison; and on the OAuth path, token validation,
+- **Host key verification** - a connection completing against a fingerprint that does not match.
+- **Both authentication modes** - static-token comparison; and on the OAuth path, token validation,
   the audience binding, the claims a refusal depends on, and the RFC 9728 document, which answers
   without a credential and so must disclose nothing beyond what it is for.
 - **Secret redaction and the audit record.** A credential surviving redaction in either direction,
   or a call that happened and left no record.
-- **The output budget** — making this process spend unbounded memory or time.
+- **The output budget** - making this process spend unbounded memory or time.
 
 ## Not a vulnerability
 
@@ -53,7 +53,7 @@ Not because they do not matter, but because a report about them is not a vulnera
   `rm -rf`" begins a list already published four hundred ways around. **`run` running a destructive
   command is the tool working.** What restrains it is which host the rule reaches and which unix
   account it logs in as.
-- **Anything a deployment configures wrong** — a grant pointing at an account with broad `sudo`,
+- **Anything a deployment configures wrong** - a grant pointing at an account with broad `sudo`,
   `allow_private_issuer` left on, a listener off loopback with no proxy. Found a way to
   misconfigure this that the README does not warn about? That is a documentation issue, and welcome.
 - **A static token not expiring.** The documented limit of the zero-dependency mode. One *accepted
@@ -67,7 +67,7 @@ Not because they do not matter, but because a report about them is not a vulnera
 ## Disclosure
 
 Report privately and give a fix a reasonable chance to ship. If this project is unresponsive past
-what you consider reasonable, publish — an unmaintained security-critical tool that nobody knows is
+what you consider reasonable, publish - an unmaintained security-critical tool that nobody knows is
 unmaintained is worse than a disclosed bug. Reporters are credited in the release carrying the fix
 unless they ask not to be.
 
@@ -75,5 +75,5 @@ unless they ask not to be.
 
 Everything SshWarden does is, by design, what you would otherwise call a compromise: an automated
 caller opening a shell on a production machine. The only difference is whether the grant table said
-so — which is why a defect here is not a crash but a command that ran on a host nobody authorised,
+so - which is why a defect here is not a crash but a command that ran on a host nobody authorised,
 and why the audit record is the only place it shows up.

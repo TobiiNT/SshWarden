@@ -1,7 +1,7 @@
 # SshWarden
 
 An MCP server that bridges SSH, so an agent that can speak HTTP but cannot open a shell can run
-commands on a host — through one place that records every one of them.
+commands on a host - through one place that records every one of them.
 
 **Apache-2.0. Self-hosted, and only self-hosted.** This process holds SSH credentials into your
 production machines and its logs contain the output of commands run there. Neither belongs in
@@ -11,14 +11,14 @@ somebody else's cloud, so there is no hosted tier and there is not going to be o
 
 ## What is here today
 
-All eight steps. Seven tools — `run`, `read_file`, `tail_log`, `list_changes`, `start_job`,
-`poll_job`, `kill_job` — behind a grant table, over pooled SSH, with output bounded and masked
+All eight steps. Seven tools - `run`, `read_file`, `tail_log`, `list_changes`, `start_job`,
+`poll_job`, `kill_job` - behind a grant table, over pooled SSH, with output bounded and masked
 before it leaves the process, every call in an append-only log whether it was allowed, refused or
 failed, and six metrics over the same records.
 
 - MCP over Streamable HTTP, bearer-authenticated, deny-by-default: an endpoint is authenticated
   unless it says otherwise where it is mapped.
-- **Two ways in behind one seam** — a static token in a file, or OAuth 2.1 access tokens from any
+- **Two ways in behind one seam** - a static token in a file, or OAuth 2.1 access tokens from any
   authorization server. A deployment picks one in the config; nothing downstream knows which ran.
 - Per-tool, per-host and per-argument authorization, filtering `tools/list` and gating `tools/call`.
 - An SSH connection pool with mandatory host-key verification.
@@ -76,14 +76,14 @@ rotating it silently signs them out. Every problem is reported at once.
 
 **It will not do two things for you, and both absences are the design.** It does not accept
 `--token`: a credential passed as an argument is readable by every process on the machine through
-`ps`, so it generates one instead. And it does not scan for host fingerprints — a fingerprint read
+`ps`, so it generates one instead. And it does not scan for host fingerprints - a fingerprint read
 off the network is one verified by whoever answered, which is trust-on-first-use wearing a different
 name.
 
 For the server, `--config` is the only argument read and `SSHWARDEN_CONFIG` the only environment
 variable, for that same reason. A bad config exits **78** (`EX_CONFIG`) and prints every problem; an
 authorization server that does not answer exits **69** (`EX_UNAVAILABLE`) instead, because the two
-want opposite responses from a supervisor — a typo fails identically on every restart, and an
+want opposite responses from a supervisor - a typo fails identically on every restart, and an
 authorization server that is still booting does not.
 
 Or write the config by hand from
@@ -98,7 +98,7 @@ is in [`SECURITY.md`](SECURITY.md); the arguments behind these are in
 [`docs/DESIGN.md`](docs/DESIGN.md).
 
 - **The command is not filtered, permanently.** `run` takes a shell command and passes it through
-  unchanged. Filtering by content is not a feature that has not been built — it is not answerable at
+  unchanged. Filtering by content is not a feature that has not been built - it is not answerable at
   the string level, and every attempt reduces to a list of program names somebody has already
   published four hundred ways around. The gate is the host and the account, not the string. For the
   same reason the working directory is recorded but is **not** a boundary: a command can `cd`
@@ -112,7 +112,7 @@ is in [`SECURITY.md`](SECURITY.md); the arguments behind these are in
 
 - **A host key is verified or the connection does not happen.** Every `[[host]]` declares a
   `fingerprint`. There is no trust-on-first-use and no way to switch it off, because a connection
-  made without checking hands the private key's authority — and every command — to whoever answered.
+  made without checking hands the private key's authority - and every command - to whoever answered.
 
 - **The listener is loopback by default.** A real deployment is publicly reachable through a reverse
   proxy terminating TLS in front of this, not by opening this socket; startup warns when the address
@@ -127,13 +127,13 @@ is in [`SECURITY.md`](SECURITY.md); the arguments behind these are in
 
 - **Secret masking is best-effort, and that is not a hedge.** Output is matched against patterns
   somebody thought of, and a credential shaped like none of them goes through untouched. It is the
-  **second** line — the first is the `ssh_user` not being able to read the file at all. Masking runs
+  **second** line - the first is the `ssh_user` not being able to read the file at all. Masking runs
   on the tool result and on the audit record including the command line, because environment
   variables have to be inlined into the command and a token passed as one would otherwise be
   recorded verbatim.
 
 - **A path is checked twice, and only the second check sees a symlink.** What a caller writes is
-  checked here — absolute, no `..`, under an allowed prefix — then resolved **on the target** with
+  checked here - absolute, no `..`, under an allowed prefix - then resolved **on the target** with
   `realpath -e` and checked again, because a symlink out of the allowed tree passes every test that
   can be made from this side. The gap between resolving and reading is not closeable from here.
 
@@ -150,14 +150,14 @@ is in [`SECURITY.md`](SECURITY.md); the arguments behind these are in
   counter.
 
 - **The scopes this server advertises are published unauthenticated.** They go in the RFC 9728
-  document, which is the one response that must answer without a credential — so a scope naming a
+  document, which is the one response that must answer without a credential - so a scope naming a
   host publishes that host to anyone who asks. The loader refuses a scope naming a host this file
   declares, warns on one carrying a path separator (a published directory layout and a scope that is
   simply a URL cannot be told apart from here), and refuses outright anything outside RFC 6749
   §3.3's character set.
 
 - **The config refuses to be sloppy.** Mode other than 0600, an unknown key, a token under the
-  minimum — each is a startup failure rather than a warning, because a misspelled key is a rule that
+  minimum - each is a startup failure rather than a warning, because a misspelled key is a rule that
   silently does not apply, which costs an incident rather than a restart.
 
 ## Building on it
@@ -171,7 +171,7 @@ Warnings are errors. This process issues commands that run as somebody on a prod
 warning is a defect that has not been noticed yet.
 
 `tests/SshWarden.Ssh.IntegrationTests` starts a real OpenSSH server on loopback, because everything
-at that layer is a claim about somebody else's software — whether a quoted argument survives a real
+at that layer is a claim about somebody else's software - whether a quoted argument survives a real
 shell, whether a remote timeout really kills the process, whether several commands share one
 connection. It **fails rather than skips** without an `sshd` to run: a suite that skips is green in
 exactly the situation where it measured nothing. `apt-get install openssh-server`.
