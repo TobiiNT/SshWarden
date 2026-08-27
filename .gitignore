@@ -10,10 +10,10 @@ TestResults/
 *.trx
 *.coverage
 
-# The config file holds the static tokens and the SSH credentials, and §6.1 of
-# HANDOFF.md requires it to be mode 0600 on disk. A copy of it in git is the
-# same secret with the file mode removed, so the pattern is here rather than in
-# a reviewer's head. `sshwarden.example.toml` is checked in on purpose and is
+# The config file holds the static tokens and the SSH credentials, and
+# docs/DESIGN.md §6.1 requires it to be mode 0600 on disk. A copy of it in git is
+# the same secret with the file mode removed, so the pattern is here rather than
+# in a reviewer's head. `sshwarden.example.toml` is checked in on purpose and is
 # excluded below - it carries placeholder values that the loader refuses.
 sshwarden.toml
 *.sshwarden.toml
@@ -31,8 +31,9 @@ id_rsa*
 *.jsonl
 audit/
 
-# The handoff brief, which is written to an agent rather than to a reader of this project - it
-# names a person, their timezone and how they want to be talked to. Its design content lives in
-# docs/DESIGN.md, in English, with the section numbers the code cites. Ignored so a working copy
-# kept beside the repository cannot be committed by accident.
+# A brief written to an agent rather than to a reader of this project. Nothing of the kind is
+# checked in and nothing here needs one - the design this repository was built from is
+# docs/DESIGN.md, in English, carrying the section numbers the code cites. The rule stays because
+# a note like that is written for one deployment and reads like documentation to everyone else,
+# and this is the cheapest place to stop one being committed by accident.
 HANDOFF.md
