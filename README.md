@@ -69,6 +69,12 @@ sshwarden init --auth oauth \
 `--subject` is what the grant table is keyed on, and in this mode it has to be the `sub` the
 authorization server puts in its access tokens rather than a name a person recognises.
 
+**Any authorization server that issues JWT access tokens**, reached by OpenID Connect discovery
+against `--issuer`. Nothing here is written for a particular one: the three claim names that differ
+between servers are config keys, so pointing this at Keycloak, Entra, Auth0 or
+[Boltway](https://github.com/TobiiNT/Boltway) is a matter of naming what yours emits, not of
+installing an adapter for it.
+
 `init` makes the directories at 0700, writes the file at 0600 from the first byte, generates a token
 and prints it once, and points the audit log and job registry somewhere writable. It refuses to
 overwrite an existing config, because the token in one is in somebody's client configuration and
