@@ -3,10 +3,10 @@ namespace SshWarden.Auth;
 /// <summary>The authorization server could not be reached while the process was starting.</summary>
 /// <remarks>
 /// <para>
-/// <strong>Here rather than in one of the two OAuth adapters, because both raise it.</strong> It
-/// began in <c>SshWarden.Boltway</c>, which made it unreachable from the generic adapter and from
-/// anything a deployment writes itself - so a third implementation would have had to invent its own
-/// type, and the host would have needed a catch clause per adapter to print one message.
+/// <strong>Here rather than inside the OAuth adapter that raises it.</strong> It began inside an
+/// adapter, which made it unreachable from anything a deployment writes itself - so a second
+/// implementation would have had to invent its own type, and the host would have needed a catch
+/// clause per adapter to print one message.
 /// </para>
 /// <para>
 /// Its own type so the host can tell it from a defect. Both arrive at the same place - an exception

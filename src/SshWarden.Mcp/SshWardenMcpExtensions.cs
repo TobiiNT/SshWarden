@@ -76,19 +76,20 @@ public static class SshWardenMcpExtensions
                 // starts, serves the MCP endpoint, and resolves an authenticator that is not there
                 // only when the first caller arrives.
                 //
-                // The message names both shipped adapters and neither exclusively. SshWarden works
-                // with any authorization server that issues JWT access tokens; naming one vendor
-                // here would answer "does it work with mine?" with "no", in the one place somebody
-                // asking that question is looking.
+                // The message names no vendor. SshWarden works with any authorization server that
+                // issues JWT access tokens, and naming one here would answer "does it work with
+                // mine?" with "no", in the one place somebody asking that question is looking. It
+                // used to name a second shipped adapter beside the generic one; that adapter is
+                // gone, because what an authorization server hands a resource server is a JWT, a
+                // JWKS document and an RFC 9728 identifier, and one reader of those is enough.
                 if (!services.Any(service => service.ServiceType == typeof(ISshWardenAuthenticator)))
                 {
                     throw new InvalidOperationException(
                         $"auth.mode is '{AuthModes.OAuth}' and no {nameof(ISshWardenAuthenticator)} "
                             + "is registered. Reference SshWarden.OAuth and call "
                             + "AddSshWardenOAuth(configuration) before AddSshWarden - that works "
-                            + "with any authorization server issuing JWT access tokens. "
-                            + "SshWarden.Boltway is the same seam filled by Boltway's own reader, "
-                            + $"and so is anything you implement. Or switch to auth.mode "
+                            + "with any authorization server issuing JWT access tokens, and so does "
+                            + $"anything you implement against this seam. Or switch to auth.mode "
                             + $"'{AuthModes.StaticToken}'.");
                 }
 
@@ -360,9 +361,9 @@ public static class SshWardenMcpExtensions
 
             // The framework's marker as well as this project's, and both are needed. The first is
             // what SshWarden's own middleware reads; this is what any other gate in the pipeline
-            // reads, and in OAuth mode there is one - Boltway's, which protects every routed
-            // endpoint by default. Without this the liveness probe answered 401, which is a health
-            // check that reports the process is unwell whenever authentication is working.
+            // reads, and in OAuth mode there is one, since the bearer handler protects every routed
+            // endpoint. Without this the liveness probe answered 401, which is a health check that
+            // reports the process is unwell whenever authentication is working.
             .AllowAnonymous();
     }
 }

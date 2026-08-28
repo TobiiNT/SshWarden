@@ -22,31 +22,29 @@
     -->
     <PackageVersion Include="ModelContextProtocol.AspNetCore" Version="2.2.0" />
 
-    <!-- Pinned exactly rather than to a range. docs/DESIGN.md §6.2, and the reason is the same
-         one Boltway's own VERSIONING.md gives: a published version is frozen forever, so naming one
-         is naming a tree somebody can go and read.
+    <!-- **The only Boltway package left here, and it is a test dependency.**
 
-         0.4.0, up from 0.3.0, for two things this repository stopped hand-writing at that version:
-         AddJwksSigningKeys moved into Boltway.ResourceServer, where a resource server looks for it,
-         and Boltway.ResourceServer.Testing appeared. 0.3.0 remains the release that first carried
-         CallerPrincipal.ScopeClaim, which is what makes an empty scope set stop meaning three
-         different things - nothing here needs a version older than that. -->
-    <PackageVersion Include="Boltway.ResourceServer" Version="0.4.0" />
-    <PackageVersion Include="Boltway.OAuth.Net" Version="0.4.0" />
+         Boltway.ResourceServer and Boltway.OAuth.Net used to be shipped dependencies, of an
+         assembly that validated Boltway's tokens with Boltway's own code. That assembly is gone:
+         Boltway is an authorization server somebody deploys, and what reaches this process from it
+         is a JWT, a JWKS document and an RFC 9728 resource identifier. All three are standards
+         src/SshWarden.OAuth already speaks, and pointing it at a Boltway issuer needs one config
+         line rather than a second implementation. See docs/DESIGN.md §6.2.
 
-    <!-- Test-only, and referenced from both OAuth suites rather than only the Boltway one.
+         What this one carries is RFC 9728 conformance run against a wired pipeline: eight
+         assertions over an HttpClient, a resource identifier and one protected path, with no
+         Boltway type in its surface. The defect it exists to catch, a host whose authentication
+         middleware does not read the framework's anonymous marker so the discovery document answers
+         401, is one SshWarden.OAuth can have as easily as anything else.
 
-         What it carries is RFC 9728 conformance run against a wired pipeline - eight assertions
-         over an HttpClient, a resource identifier and one protected path, with no Boltway type in
-         its surface. That makes it as true of this repository's own OAuth mode as of the Boltway
-         one, and the defect it exists to catch (a host whose authentication middleware does not
-         read the framework's anonymous marker, so the discovery document answers 401) is a defect
-         SshWarden.OAuth can have just as easily.
+         **It stays a test dependency.** src/SshWarden.OAuth references nothing from Boltway and
+         must not begin to, because a deployment on some other authorization server is the case that
+         assembly exists for. Deriving a conformance suite from a project is not the same as
+         depending on it.
 
-         **It is a test dependency and it stays one.** src/SshWarden.OAuth references nothing from
-         Boltway and must not begin to: a deployment on any other authorization server is the case
-         that assembly exists for. Deriving a conformance suite is not the same as depending on the
-         implementation it was written beside. -->
+         Pinned exactly rather than to a range: a published version is frozen forever, so naming one
+         is naming a tree somebody can go and read, and a range would let a consumer's restore pick
+         a version this was never built against. -->
     <PackageVersion Include="Boltway.ResourceServer.Testing" Version="0.4.0" />
   </ItemGroup>
 

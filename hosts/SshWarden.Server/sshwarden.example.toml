@@ -309,9 +309,13 @@ path = "/metrics"
 #
 # This mode needs an adapter assembly, and the shipped host references SshWarden.OAuth
 # - the framework's bearer handler against whatever issuer you configure, so any
-# conformant authorization server works. SshWarden.Boltway fills the same seam with
-# Boltway's own reading of a token. A static-token deployment references neither and
-# never loads an authorization server's client libraries.
+# conformant authorization server works. A static-token deployment references it not
+# at all and never loads an authorization server's client libraries.
+#
+# There is one adapter, not one per vendor. What an authorization server hands this
+# process is a JWT, a JWKS document and an RFC 9728 identifier, and the only thing
+# that differs between servers is which claim carries what, which is the three keys
+# below.
 #
 #   # Which claim carries what. The first two default to RFC 9068's names; the third
 #   # has no RFC, so name what your server emits - `gid` on Boltway, `sid` on a server

@@ -9,11 +9,13 @@
   <ItemGroup>
     <ProjectReference Include="../../src/SshWarden.Mcp/SshWarden.Mcp.csproj" />
     <!--
-      The generic adapter, not the Boltway one. This host is what somebody runs; wiring it to one
-      sibling project's packages made "does it work with my authorization server" answerable only by
-      editing this file. SshWarden.Boltway still ships and still fills the same seam - a deployment
-      that wants Boltway's own reading of a token references it and calls AddSshWardenBoltway
-      instead, and nothing here has to change for a third implementation.
+      The generic adapter, which works with any authorization server issuing JWT access tokens. This
+      host is what somebody runs, and wiring it to one particular server's packages once made "does
+      it work with mine?" answerable only by editing this file.
+
+      It is the only adapter shipped now, and it stays a ProjectReference rather than something
+      AddSshWarden pulls in: a static-token install is not made to carry an authorization server's
+      client libraries. A deployment writing its own adapter swaps this line and nothing else.
     -->
     <ProjectReference Include="../../src/SshWarden.OAuth/SshWarden.OAuth.csproj" />
   </ItemGroup>

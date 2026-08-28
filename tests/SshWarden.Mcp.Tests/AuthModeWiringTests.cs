@@ -12,10 +12,9 @@ namespace SshWarden.Mcp.Tests;
 /// </summary>
 /// <remarks>
 /// An `oauth` implementation lives in its own assembly - SshWarden.OAuth for any authorization
-/// server, SshWarden.Boltway for Boltway's own reading of a token, or one a deployment writes -
-/// which it references on purpose so a static-token install is not made to carry an authorization
-/// server's client libraries. The cost of that separation is that this package cannot register
-/// one, so it has to check somebody did.
+/// server issuing JWT access tokens, or one a deployment writes - which it references on purpose so
+/// a static-token install is not made to carry an authorization server's client libraries. The cost
+/// of that separation is that this package cannot register one, so it has to check somebody did.
 /// </remarks>
 public sealed class AuthModeWiringTests
 {
@@ -30,15 +29,16 @@ public sealed class AuthModeWiringTests
         var problem = Assert.Throws<InvalidOperationException>(
             () => services.AddSshWarden(Configuration(AuthModes.OAuth)));
 
-        // The generic adapter first, because it works with any authorization server issuing JWT
-        // access tokens - and this message is the one place somebody asking "does it work with
-        // mine?" is looking. It used to name only SshWarden.Boltway, which answered that question
-        // "no" for every reader who does not run Boltway.
+        // The generic adapter, because it works with any authorization server issuing JWT access
+        // tokens - and this message is the one place somebody asking "does it work with mine?" is
+        // looking.
         Assert.Contains("AddSshWardenOAuth", problem.Message, StringComparison.Ordinal);
 
-        // And it still names the other shipped adapter, because a Boltway deployment reading this
-        // should not conclude its own path was removed.
-        Assert.Contains("SshWarden.Boltway", problem.Message, StringComparison.Ordinal);
+        // And no vendor, which is the half worth asserting rather than assuming. This message named
+        // a specific authorization server for as long as a second adapter shipped for one, and it
+        // answered "does it work with mine?" with "no" for every reader who ran something else. The
+        // adapter is gone; this keeps the name from coming back, because nothing else would notice.
+        Assert.DoesNotContain("Boltway", problem.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

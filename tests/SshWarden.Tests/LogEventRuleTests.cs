@@ -29,7 +29,6 @@ public sealed class LogEventRuleTests
         ("src/SshWarden", "SshWarden", LogEvents.Core),
         ("src/SshWarden.Mcp", "SshWarden.Mcp", LogEvents.Mcp),
         ("src/SshWarden.OAuth", "SshWarden.OAuth", LogEvents.OAuth),
-        ("src/SshWarden.Boltway", "SshWarden.Boltway", LogEvents.Boltway),
         ("hosts/SshWarden.Server", "SshWarden.Server", LogEvents.Server),
     ];
 
@@ -170,7 +169,6 @@ public sealed class LogEventRuleTests
                     "Core" => LogEvents.Core,
                     "Mcp" => LogEvents.Mcp,
                     "OAuth" => LogEvents.OAuth,
-                    "Boltway" => LogEvents.Boltway,
                     "Server" => LogEvents.Server,
                     var other => throw new InvalidOperationException(
                         $"{file} builds an event id from LogEvents.{other}, which this rule does not "

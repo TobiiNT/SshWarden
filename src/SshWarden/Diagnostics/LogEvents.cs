@@ -51,14 +51,6 @@ public static class LogEvents
     /// </remarks>
     public const int OAuth = 5000;
 
-    /// <summary>Where <c>SshWarden.Boltway</c>'s ids start.</summary>
-    /// <remarks>
-    /// Reserved rather than used. That assembly logs nothing today - it refuses at startup instead,
-    /// which is louder - and the range exists so the day it does log, the number is not another
-    /// choice somebody makes alone.
-    /// </remarks>
-    public const int Boltway = 3000;
-
     /// <summary>Where the server host's ids start.</summary>
     /// <remarks>Startup and shutdown: what a process says before it serves anything.</remarks>
     public const int Server = 4000;

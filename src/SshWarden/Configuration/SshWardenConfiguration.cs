@@ -380,11 +380,11 @@ public static class AuthModes
     /// <summary>Credentials listed in the config file. The default, and zero dependencies.</summary>
     public const string StaticToken = "static-token";
 
-    /// <summary>Access tokens from an OAuth 2.1 authorization server, validated by Boltway.</summary>
+    /// <summary>Access tokens from an OAuth 2.1 authorization server, whichever one you run.</summary>
     /// <remarks>
     /// Added in the same change as a working authenticator for it, never ahead of one - a mode that
     /// parses and loads nothing says the deployment is authenticating one way while it is not
-    /// authenticating at all. What makes it work is <c>SshWarden.Boltway</c>, a separate assembly a
+    /// authenticating at all. What makes it work is <c>SshWarden.OAuth</c>, a separate assembly a
     /// deployment references on purpose, so a static-token install is not made to carry an
     /// authorization server's client libraries.
     /// </remarks>

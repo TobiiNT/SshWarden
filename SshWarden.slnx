@@ -2,7 +2,6 @@
   <Folder Name="/src/">
     <Project Path="src/SshWarden/SshWarden.csproj" />
     <Project Path="src/SshWarden.Mcp/SshWarden.Mcp.csproj" />
-    <Project Path="src/SshWarden.Boltway/SshWarden.Boltway.csproj" />
     <Project Path="src/SshWarden.OAuth/SshWarden.OAuth.csproj" />
   </Folder>
   <Folder Name="/hosts/">
@@ -10,7 +9,6 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/SshWarden.Tests/SshWarden.Tests.csproj" />
-    <Project Path="tests/SshWarden.Boltway.Tests/SshWarden.Boltway.Tests.csproj" />
     <Project Path="tests/SshWarden.OAuth.Tests/SshWarden.OAuth.Tests.csproj" />
     <Project Path="tests/SshWarden.Mcp.Tests/SshWarden.Mcp.Tests.csproj" />
     <Project Path="tests/SshWarden.Ssh.IntegrationTests/SshWarden.Ssh.IntegrationTests.csproj" />
