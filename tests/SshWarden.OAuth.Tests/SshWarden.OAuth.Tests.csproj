@@ -11,16 +11,10 @@
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.visualstudio" />
     <PackageReference Include="Microsoft.AspNetCore.TestHost" />
-
-    <!-- The RFC 9728 pipeline contract, derived by ProtectedResourceContractTests. Test-only on
-         purpose: src/SshWarden.OAuth references nothing from Boltway, because a deployment on some
-         other authorization server is the case that assembly exists for. Deriving a conformance
-         suite is not depending on the implementation it was written beside. -->
-    <PackageReference Include="Boltway.ResourceServer.Testing" />
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Linked rather than copied: the Boltway suite needs the same key and the same JWKS shape,
+    <!-- Linked rather than copied: more than one suite needs the same key and the same JWKS shape,
          and two copies would agree until one of them learned something. -->
     <Compile Include="../Shared/TestSigningKey.cs" Link="TestSigningKey.cs" />
   </ItemGroup>

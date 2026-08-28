@@ -14,9 +14,9 @@
       EnforceCodeStyleInBuild - so the code-style analyzers run during the build rather than only
                                 in an editor, which is the difference between a rule and a
                                 suggestion. There is no .editorconfig here yet; when one arrives
-                                carrying banned APIs - the shape Boltway uses to keep a
-                                normalizing comparison out of a security decision - this is what
-                                makes those bans fail a build.
+                                carrying banned APIs, the shape that keeps a normalizing
+                                comparison out of a security decision, this is what makes those
+                                bans fail a build.
   -->
 
   <PropertyGroup>
@@ -25,9 +25,9 @@
       tree is at step 1, so the number says "started" rather than "a first usable release". It moves
       when there is something a person could run against a real host.
 
-      Nothing in this repository has been published to nuget.org, and unlike the sentence that said
-      the same thing in Boltway - which was false when it was written - this one is checkable and was
-      checked: `curl https://api.nuget.org/v3-flatcontainer/sshwarden/index.json` answers 404, as do
+      Nothing in this repository has been published to nuget.org, and this is checkable rather than
+      assumed, because a sentence like it has been wrong before somewhere else: `curl
+      https://api.nuget.org/v3-flatcontainer/sshwarden/index.json` answers 404, as do
       the same queries for `sshwarden.mcp` and `sshwarden.server`. Measured 2026-08-26. Re-check
       before believing it; a comment is a claim and the feed is the fact.
     -->
@@ -38,11 +38,14 @@
     <!--
       net10.0 only, and the reason is narrower than it looks.
 
-      It is not `Base64Url` (that only forces net9) and it is not the MCP SDK
-      (`ModelContextProtocol.AspNetCore 2.2.0` ships lib/net8.0, net9.0 and net10.0). It is that
-      step 8 of docs/DESIGN.md §7 references `Boltway.Mcp`, whose own Directory.Build.props pins
-      net10.0 for its whole tree. Targeting anything lower here buys a framework this cannot
-      actually consume its own dependency on. docs/DESIGN.md §6.2 records the corrected reasoning.
+      **Nothing forces it any more, and that is the honest state of this line.** It was forced by a
+      dependency whose own tree pinned net10.0, and that dependency is gone. What is left is a floor
+      of net9, from `Base64Url`, and a choice above it: `ModelContextProtocol.AspNetCore 2.2.0` ships
+      lib/net8.0, net9.0 and net10.0, so it does not decide either.
+
+      Left at net10.0 because lowering a target framework is a decision with consumers on the other
+      side of it and no consumer is asking. Move it when one does, not because this comment stopped
+      naming a constraint.
     -->
     <TargetFramework>net10.0</TargetFramework>
     <LangVersion>latest</LangVersion>
@@ -79,9 +82,8 @@
     <Copyright>Copyright © 2026 Tobii (Truong To)</Copyright>
 
     <!--
-      Apache-2.0 rather than MIT, matching Boltway, and for the reason docs/DESIGN.md §3.3 gives: the
-      patent grant is what makes this adoptable inside a company. Rev 5 of the handoff said MIT in
-      one section and Apache-2.0 in two others; Apache-2.0 is the one that survived.
+      Apache-2.0 rather than MIT, for the reason docs/DESIGN.md §3.3 gives: the patent grant is what
+      makes this adoptable inside a company.
     -->
     <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/TobiiNT/SshWarden</PackageProjectUrl>

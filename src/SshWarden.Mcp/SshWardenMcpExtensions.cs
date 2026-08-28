@@ -36,10 +36,9 @@ public static class SshWardenMcpExtensions
     /// <remarks>
     /// <para>
     /// The authenticator is registered with <c>TryAdd</c>, so a registration made <strong>before</strong>
-    /// this call wins and one made after it silently does nothing. That is the same contract Boltway
-    /// uses for its own seams, and the ordering is part of it rather than an implementation detail:
-    /// a deployment replacing the authenticator has to know which side of this call to stand on, and
-    /// the wrong side fails by doing nothing at all.
+    /// this call wins and one made after it silently does nothing. The ordering is part of the
+    /// contract rather than an implementation detail: a deployment replacing the authenticator has to
+    /// know which side of this call to stand on, and the wrong side fails by doing nothing at all.
     /// </para>
     /// </remarks>
     public static IMcpServerBuilder AddSshWarden(

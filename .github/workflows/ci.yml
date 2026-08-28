@@ -21,7 +21,7 @@ on:
   # impossible: a run cancelled by hand, or one that died on a transient registry error, still leaves
   # a commit on main with no `ghcr.io/...:<sha>`, and `release.yml` refuses to tag an image that is
   # not in the registry. Without this input that commit cannot be released at all, and the only route
-  # back is a fresh commit - which is what it cost Boltway.
+  # back is a fresh commit, which is what this cost the last project that hit it.
   #
   # `ref` takes a sha and not only a branch, because the stranded commit is by definition not the
   # branch head any more. Dispatch it from main: the push condition inside the job reads
@@ -51,8 +51,9 @@ permissions:
 # every push to main is a commit that stays permanently addressable. Two merges in quick succession
 # would cancel the first one's `image` job, and that commit would have no `ghcr.io/...:<sha>` - not
 # late, never - which `release.yml` then refuses to tag. Superseded is a property of a branch tip; it
-# is not a property of a commit already on main that may still be released. Boltway made a commit
-# unreleasable exactly this way.
+# is not a property of a commit already on main that may still be released. That is not
+# hypothetical: a commit was made unreleasable exactly this way, on a repository built to this same
+# shape, before this line said what it says.
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}

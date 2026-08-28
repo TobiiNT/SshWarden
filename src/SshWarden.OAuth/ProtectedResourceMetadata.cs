@@ -73,8 +73,7 @@ public sealed class ProtectedResourceMetadata
     }
 
     // Where this document lives - the well-known suffix, the path-inserted form and the absolute
-    // URL - is SshWarden.Auth.ResourceMetadataUrl, in core. It moved there because the Boltway mode
-    // names the same URL in its own challenge and this assembly is not on its reference path.
-    // Nothing about the arithmetic changed; it has one home now instead of the two it was about to
-    // have.
+    // URL - is SshWarden.Auth.ResourceMetadataUrl, in core. It moved there because the code that
+    // names the same URL in a challenge is not always on this assembly's reference path. Nothing
+    // about the arithmetic changed; it has one home instead of the two it was about to have.
 }

@@ -34,11 +34,17 @@ public sealed class AuthModeWiringTests
         // looking.
         Assert.Contains("AddSshWardenOAuth", problem.Message, StringComparison.Ordinal);
 
-        // And no vendor, which is the half worth asserting rather than assuming. This message named
-        // a specific authorization server for as long as a second adapter shipped for one, and it
-        // answered "does it work with mine?" with "no" for every reader who ran something else. The
-        // adapter is gone; this keeps the name from coming back, because nothing else would notice.
-        Assert.DoesNotContain("Boltway", problem.Message, StringComparison.OrdinalIgnoreCase);
+        // And that it says so in as many words, which is the half worth asserting rather than
+        // assuming. This message named a specific authorization server for as long as a second
+        // adapter shipped for one, and it answered "does it work with mine?" with "no" for every
+        // reader who ran something else.
+        //
+        // **This is the weaker of the two guards available and the trade is deliberate.** Asserting
+        // the absence of a particular vendor's name would catch one coming back; it would also put
+        // that name in this repository, which is the thing being kept out. Asserting the promise is
+        // present catches the message losing it, which is the failure that actually stranded a
+        // reader.
+        Assert.Contains("any authorization server", problem.Message, StringComparison.Ordinal);
     }
 
     [Fact]
