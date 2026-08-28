@@ -30,6 +30,13 @@ public sealed class HostFingerprintTests
     [InlineData("MD5:aa:bb:cc")]
     [InlineData("SHA256:")]
     [InlineData("SHA256:tooshort")]
+
+    // Shorter than the prefix itself. Every case above is at least as long as "SHA256:", so the
+    // decoder's unchecked slice at that offset was never reached with less to slice - and these
+    // threw out of the host key callback instead of answering no, which is the one answer this
+    // method promises for a value it cannot read.
+    [InlineData("")]
+    [InlineData("SHA256")]
     public void An_unusable_fingerprint_is_rejected_with_a_reason(string value)
     {
         Assert.False(HostFingerprint.IsValid(value, out var problem));
