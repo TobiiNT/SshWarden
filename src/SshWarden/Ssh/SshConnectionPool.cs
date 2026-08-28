@@ -253,6 +253,8 @@ public sealed class SshConnectionPool : IAsyncDisposable
                 continue;
             }
 
+            var evicted = false;
+
             try
             {
                 if (entry.Client is not null && entry.LastUsed < cutoff)
@@ -260,13 +262,19 @@ public sealed class SshConnectionPool : IAsyncDisposable
                     entry.Close();
                     _ = _entries.TryRemove(key, out _);
                     entry.Gate.Dispose();
+                    evicted = true;
                 }
             }
             finally
             {
-                // Disposed above when the entry was removed; releasing a disposed semaphore throws,
-                // and this runs on a timer thread where an exception is not attached to anything.
-                if (_entries.ContainsKey(key))
+                // Whether *this* pass disposed *this* gate, rather than whether the dictionary holds
+                // anything under this key. Those stop being the same question the moment an
+                // AcquireAsync puts a fresh entry there between the removal above and the check: the
+                // lookup then finds the new entry, says yes, and releases the old gate that was just
+                // disposed. Releasing a disposed semaphore throws, and this runs on a timer thread
+                // where an exception is attached to nothing and takes the process with it - which is
+                // the outcome the dictionary lookup was reaching for and narrowly missed.
+                if (!evicted)
                 {
                     _ = entry.Gate.Release();
                 }
