@@ -181,7 +181,7 @@ public sealed class RunTool
                 StdoutBytes = outcome.StdoutBytes,
                 OutputTruncated = stdout.Truncated || stderr.Truncated,
                 RedactedValues = stdout.RedactedCount + stderr.RedactedCount,
-                Notes = Notes(stdout, stderr),
+                Notes = OutputNotes.For(stdout, stderr),
                 Host = target.Name,
                 SshUser = grant.SshUser,
                 Workdir = recordedWorkdir,
@@ -235,29 +235,6 @@ public sealed class RunTool
                 ChangesConfidence = attributed.Confidence,
             });
         }
-    }
-    private static List<string> Notes(PreparedOutput stdout, PreparedOutput stderr)
-    {
-        var notes = new List<string>();
-
-        // A filter that did not run is the case most worth saying out loud: the caller asked for a
-        // subset, got everything, and would otherwise read the extra lines as matches.
-        foreach (var problem in new[] { stdout.FilterProblem, stderr.FilterProblem })
-        {
-            if (problem is not null && !notes.Contains(problem, StringComparer.Ordinal))
-            {
-                notes.Add(problem);
-            }
-        }
-
-        if (stdout.RedactionIncomplete || stderr.RedactionIncomplete)
-        {
-            notes.Add(
-                "Secret masking did not finish on this output, so it may still contain credentials. "
-                    + "Treat it as unmasked.");
-        }
-
-        return notes;
     }
 }
 

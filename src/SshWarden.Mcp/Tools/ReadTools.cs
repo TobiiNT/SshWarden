@@ -131,6 +131,7 @@ public sealed class ReadTools
             Bytes = outcome.StdoutBytes,
             Truncated = prepared.Truncated,
             RedactedValues = prepared.RedactedCount,
+            Notes = OutputNotes.For(prepared),
             Host = target.Name,
             SshUser = resolved.Grant.SshUser,
             Path = resolved.Path,
@@ -234,6 +235,7 @@ public sealed class ReadTools
             Bytes = outcome.StdoutBytes,
             Truncated = prepared.Truncated,
             RedactedValues = prepared.RedactedCount,
+            Notes = OutputNotes.For(prepared),
             Host = target.Name,
             SshUser = grant.SshUser,
             Source = resolvedPath ?? selector,
@@ -466,6 +468,16 @@ public sealed class ReadFileResult
     [JsonPropertyName("redacted_values")]
     public required int RedactedValues { get; init; }
 
+    /// <summary>
+    /// Anything that happened to this output which the text itself does not say.
+    /// </summary>
+    /// <remarks>
+    /// Empty in the ordinary case. It carries what a caller would otherwise silently misread:
+    /// masking that ran out of time and so did not finish.
+    /// </remarks>
+    [JsonPropertyName("notes")]
+    public required IReadOnlyList<string> Notes { get; init; }
+
     /// <summary>The host.</summary>
     [JsonPropertyName("host")]
     public required string Host { get; init; }
@@ -506,6 +518,17 @@ public sealed class TailLogResult
     /// <summary>How many credential-shaped values were masked. Best-effort.</summary>
     [JsonPropertyName("redacted_values")]
     public required int RedactedValues { get; init; }
+
+    /// <summary>
+    /// Anything that happened to this output which the text itself does not say.
+    /// </summary>
+    /// <remarks>
+    /// Empty in the ordinary case. It carries what a caller would otherwise silently misread: a
+    /// grep pattern that did not compile and so filtered nothing, or masking that ran out of time
+    /// and so did not finish.
+    /// </remarks>
+    [JsonPropertyName("notes")]
+    public required IReadOnlyList<string> Notes { get; init; }
 
     /// <summary>The host.</summary>
     [JsonPropertyName("host")]
