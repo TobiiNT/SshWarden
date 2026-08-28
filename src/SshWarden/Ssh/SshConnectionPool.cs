@@ -76,7 +76,11 @@ public sealed class SshConnectionPool : IAsyncDisposable
         // Swept on a timer rather than only when the next call happens to arrive. A connection
         // nobody asks for again would otherwise be held forever, and it is not free on the other
         // end: it occupies a session on the target host's sshd, against a limit that host sets.
-        _sweeper = new Timer(_ => EvictIdle(), state: null, _idleEviction, _idleEviction);
+        _sweeper = new Timer(
+            _ => EvictIdle(DateTimeOffset.UtcNow - _idleEviction),
+            state: null,
+            _idleEviction,
+            _idleEviction);
     }
 
     /// <summary>Gets a connected client for <paramref name="host" /> as <paramref name="sshUser" />.</summary>
@@ -240,44 +244,55 @@ public sealed class SshConnectionPool : IAsyncDisposable
         keyEvent.CanTrust = HostFingerprint.Matches(host.Fingerprint, keyEvent.HostKey);
     }
 
-    private void EvictIdle()
+    /// <summary>Closes every connection unused since <paramref name="cutoff" />.</summary>
+    /// <param name="cutoff">A connection last used before this is idle.</param>
+    /// <remarks>
+    /// <para>
+    /// <strong>The connection is closed and the entry is kept.</strong> Reclaiming the entry as well
+    /// buys back a semaphore and a timestamp, against a key space the config file already bounds:
+    /// both halves come from a configured host and a configured grant, so it cannot grow with
+    /// traffic. What eviction is for is the connection, which holds a session on the target's sshd
+    /// against a limit that host sets, and that is released here either way.
+    /// </para>
+    /// <para>
+    /// <strong>Removing it cost two races, and this is what they were.</strong> A caller reads its
+    /// entry out of the dictionary and then waits on that entry's gate, and those are two steps. A
+    /// sweep landing between them used to remove the entry and dispose the gate underneath it:
+    /// disposing a semaphore somebody is waiting on does not hand that waiter an error, it simply
+    /// never completes, so the tool call hung rather than failed. And a caller that got through
+    /// would reconnect onto an entry no longer in the dictionary, leaving a live connection nothing
+    /// would ever close - the leak the gate exists to prevent, reached through the gate. Neither is
+    /// a guard that was missing; both are what removing an object other threads already hold means.
+    /// </para>
+    /// <para>
+    /// <strong>The cutoff is a parameter rather than read from the field</strong> so the decision
+    /// can be driven without waiting on a clock. Eviction had no test at all while it was reading
+    /// its own idle window, because reaching it meant letting the sweep timer fire.
+    /// </para>
+    /// </remarks>
+    internal void EvictIdle(DateTimeOffset cutoff)
     {
-        var cutoff = DateTimeOffset.UtcNow - _idleEviction;
-
-        foreach (var (key, entry) in _entries)
+        foreach (var entry in _entries.Values)
         {
-            // Only if the gate is free. An entry mid-connect is not idle, and taking it away from
-            // under the call that is building it would close a client that call is about to use.
+            // Only if the gate is free. An entry mid-connect is not idle, and taking the client out
+            // from under the call that is building it would close one that call is about to use.
             if (!entry.Gate.Wait(0))
             {
                 continue;
             }
-
-            var evicted = false;
 
             try
             {
                 if (entry.Client is not null && entry.LastUsed < cutoff)
                 {
                     entry.Close();
-                    _ = _entries.TryRemove(key, out _);
-                    entry.Gate.Dispose();
-                    evicted = true;
                 }
             }
             finally
             {
-                // Whether *this* pass disposed *this* gate, rather than whether the dictionary holds
-                // anything under this key. Those stop being the same question the moment an
-                // AcquireAsync puts a fresh entry there between the removal above and the check: the
-                // lookup then finds the new entry, says yes, and releases the old gate that was just
-                // disposed. Releasing a disposed semaphore throws, and this runs on a timer thread
-                // where an exception is attached to nothing and takes the process with it - which is
-                // the outcome the dictionary lookup was reaching for and narrowly missed.
-                if (!evicted)
-                {
-                    _ = entry.Gate.Release();
-                }
+                // Unconditional, because nothing above can dispose this gate any more. The flag that
+                // used to decide this existed only to tell a disposed gate from a live one.
+                _ = entry.Gate.Release();
             }
         }
     }
