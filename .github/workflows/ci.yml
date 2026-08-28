@@ -192,10 +192,11 @@ jobs:
       # server people hand SSH access to their production hosts, so "is the image I pulled the image
       # this repository built" should not resolve to "ask whoever can write to ghcr".
       #
-      # **Both buy nothing at all while this repository is private**, because the *Attest* step below
-      # cannot run there. They stay anyway, so that making the repository public is one setting
-      # rather than a setting plus a workflow edit somebody has to know to make - a grant that has to
-      # be remembered later is one that gets remembered as a failed release.
+      # **Both bought nothing while this repository was private**, because the *Attest* step below
+      # could not run there, and they were kept anyway rather than added later: making the repository
+      # public then needed one setting rather than a setting plus a workflow edit somebody had to
+      # know to make, and a grant that has to be remembered later is one that gets remembered as a
+      # failed release. It went public on 2026-08-27, which is when they started buying anything.
       id-token: write
       attestations: write
 
