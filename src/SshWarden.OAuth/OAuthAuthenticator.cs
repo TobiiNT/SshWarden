@@ -119,10 +119,20 @@ public sealed class OAuthAuthenticator(OAuthSection options) : ISshWardenAuthent
     /// restrict them, with nothing failing anywhere.
     /// </para>
     /// <para>
-    /// RFC 6749 §3.3 makes the claim a space-delimited list of scope-tokens, and §3.3's grammar
-    /// excludes the double quote and the backslash. A claim carrying either is not a scope list this
-    /// can read, and reading the part before the bad character would grant a caller some of a
-    /// restriction that was written to be read whole.
+    /// RFC 6749 §3.3 makes the claim a space-delimited list of scope-tokens, and its grammar is a
+    /// whitelist: <c>%x21 / %x23-5B / %x5D-7E</c>. A claim carrying anything else is not a scope
+    /// list this can read, and reading the part before the bad character would grant a caller some
+    /// of a restriction that was written to be read whole.
+    /// </para>
+    /// <para>
+    /// <strong>This checked for the double quote and the backslash and nothing else, which is the
+    /// grammar read backwards.</strong> Those two are the characters §3.3 excludes from the middle
+    /// of its ranges, so listing them looks like the rule and is a fraction of it: everything below
+    /// <c>%x21</c> and everything above <c>%x7E</c> is outside the grammar too. A claim carrying a
+    /// control character, a newline or any non-ASCII character was reported
+    /// <see cref="ScopeClaimState.Readable" />, split on spaces, and compared against the grant
+    /// table - so the one state that exists to say "this could not be read" was not reached by the
+    /// claims that could not be read.
     /// </para>
     /// </remarks>
     private static ScopeClaimState ReadScopeState(string? scope)
@@ -132,10 +142,23 @@ public sealed class OAuthAuthenticator(OAuthSection options) : ISshWardenAuthent
             return ScopeClaimState.Absent;
         }
 
-        return scope.Contains('"', StringComparison.Ordinal) || scope.Contains('\\', StringComparison.Ordinal)
-            ? ScopeClaimState.Unreadable
-            : ScopeClaimState.Readable;
+        foreach (var token in scope.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+        {
+            foreach (var character in token)
+            {
+                if (!IsScopeTokenCharacter(character))
+                {
+                    return ScopeClaimState.Unreadable;
+                }
+            }
+        }
+
+        return ScopeClaimState.Readable;
     }
+
+    /// <summary>RFC 6749 §3.3's <c>scope-token</c> charset, as written.</summary>
+    private static bool IsScopeTokenCharacter(char character)
+        => character is '\x21' or (>= '\x23' and <= '\x5B') or (>= '\x5D' and <= '\x7E');
 
     private static HashSet<string> ParseScopes(string? scope)
         => ReadScopeState(scope) is ScopeClaimState.Readable && scope is not null

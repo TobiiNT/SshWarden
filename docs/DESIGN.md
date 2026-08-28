@@ -470,15 +470,23 @@ Authentication sits behind **one abstraction**, with **more than one implementat
 - The implementation is chosen by configuration, not by a compile-time flag.
 - **Nothing else in the codebase may know which one is running.**
 
-Three implementations ship or are supported:
+Two implementations ship, and the seam takes any third:
 
 - **Static token** - zero dependencies, enough for somebody running their own machine. The default.
   It derives stable values for the five, because it genuinely has no authorization server behind it.
 - **`SshWarden.OAuth`** - the framework's bearer handler doing OpenID Connect discovery against any
   configured issuer, plus the RFC 9728 document. What the shipped host references.
-- **Anything else filling the same seam**, including
-  [`SshWarden.Boltway`](../src/SshWarden.Boltway), which reads a token the way that particular
-  authorization server writes it.
+- **Anything else filling the same seam**, written by a deployment that needs one.
+
+**There was a third, and removing it is the point of this paragraph.** An adapter shipped that read
+one particular authorization server's tokens using that server's own packages. Nothing it did was
+outside the standards: an authorization server hands a resource server a JWT, a JWKS document and an
+RFC 9728 resource identifier, `SshWarden.OAuth` already speaks all three, and pointing it at that
+server took one line naming the claim it spells differently, which the example config had documented
+the whole time. What the adapter cost was a second reader of the same standards to keep correct, and
+another project's packages in the dependency graph of a server whose selling point is that it
+validates somebody else's tokens. A deployment consumes an authorization server; it does not carry
+one's code.
 
 **A validated token missing `sub`, the client id, the grant id or the token id is refused, not filled
 in.** The rule above about deriving values is right for a static token; for OAuth it is not. A
@@ -569,7 +577,7 @@ test passed, because no unit was wrong. It was found by deriving the RFC 9728 pi
 `Boltway.ResourceServer.Testing`, which asserts against a wired application rather than a unit, and
 went red on the one assertion that ties the document to the challenge that should point at it.
 
-The challenge now carries both, in both OAuth modes, and the scope parameter is the configured list
+The challenge now carries both, and the scope parameter is the configured list
 whole - which is the same set a client would have reached by the fallback above, stated rather than
 relied upon.
 

@@ -113,6 +113,21 @@ public sealed class OAuthAuthenticatorTests
     [Theory]
     [InlineData("ssh:read ssh:exec", ScopeClaimState.Readable)]
     [InlineData("ssh:read \"quoted\"", ScopeClaimState.Unreadable)]
+
+    // The controls, and they are the reason the check is a grammar rather than a longer list of bad
+    // characters. RFC 6749 §3.3's scope-token is %x21 / %x23-5B / %x5D-7E, so '!' is the low end,
+    // '#' and '[' bound the middle run, ']' and '~' bound the high one. All of these are legal and
+    // have to stay legal.
+    [InlineData("a!b#c[d]e~f", ScopeClaimState.Readable)]
+
+    // Red before the grammar check landed. The old test excluded the double quote and the backslash
+    // because §3.3's grammar excludes them, which is true and is not the rule: §3.3 is a whitelist,
+    // so everything below %x21 and everything above %x7E is outside it too. A claim carrying any of
+    // these was read as a scope list, split on spaces, and compared to the grant table.
+    [InlineData("ssh:read ssh:\u0007exec", ScopeClaimState.Unreadable)]
+    [InlineData("ssh:read ssh:exec\n", ScopeClaimState.Unreadable)]
+    [InlineData("ssh:read\u007f", ScopeClaimState.Unreadable)]
+    [InlineData("ssh:r\u0435ad", ScopeClaimState.Unreadable)]
     public async Task A_scope_claim_that_is_there_is_read_and_its_readability_kept(
         string scope,
         ScopeClaimState expected)
