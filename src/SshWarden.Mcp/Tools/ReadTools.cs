@@ -115,7 +115,12 @@ public sealed class ReadTools
 
         // The smaller of what the caller asked for and what this deployment allows. Bounded on the
         // target as well, so a huge file is not moved across the network to be discarded here.
-        var budget = Math.Min(maxBytes ?? _output.MaxBytes, _output.MaxBytes);
+        //
+        // Clamped at the bottom too, the way tail_log has always clamped its line count. A zero or
+        // negative budget reached the command builder, whose ArgumentOutOfRangeException is not an
+        // McpException - so the SDK replaced the message and the caller was told only that
+        // something went wrong, after a round trip to the host had already happened.
+        var budget = Math.Clamp(maxBytes ?? _output.MaxBytes, 1, _output.MaxBytes);
 
         var outcome = await RunAsync(
             caller, ToolNames.ReadFile, startedAt, target, resolved.Grant, path,
@@ -131,6 +136,7 @@ public sealed class ReadTools
             Bytes = outcome.StdoutBytes,
             Truncated = prepared.Truncated,
             RedactedValues = prepared.RedactedCount,
+            Notes = OutputNotes.For(prepared),
             Host = target.Name,
             SshUser = resolved.Grant.SshUser,
             Path = resolved.Path,
@@ -234,6 +240,7 @@ public sealed class ReadTools
             Bytes = outcome.StdoutBytes,
             Truncated = prepared.Truncated,
             RedactedValues = prepared.RedactedCount,
+            Notes = OutputNotes.For(prepared),
             Host = target.Name,
             SshUser = grant.SshUser,
             Source = resolvedPath ?? selector,
@@ -466,6 +473,16 @@ public sealed class ReadFileResult
     [JsonPropertyName("redacted_values")]
     public required int RedactedValues { get; init; }
 
+    /// <summary>
+    /// Anything that happened to this output which the text itself does not say.
+    /// </summary>
+    /// <remarks>
+    /// Empty in the ordinary case. It carries what a caller would otherwise silently misread:
+    /// masking that ran out of time and so did not finish.
+    /// </remarks>
+    [JsonPropertyName("notes")]
+    public required IReadOnlyList<string> Notes { get; init; }
+
     /// <summary>The host.</summary>
     [JsonPropertyName("host")]
     public required string Host { get; init; }
@@ -506,6 +523,17 @@ public sealed class TailLogResult
     /// <summary>How many credential-shaped values were masked. Best-effort.</summary>
     [JsonPropertyName("redacted_values")]
     public required int RedactedValues { get; init; }
+
+    /// <summary>
+    /// Anything that happened to this output which the text itself does not say.
+    /// </summary>
+    /// <remarks>
+    /// Empty in the ordinary case. It carries what a caller would otherwise silently misread: a
+    /// grep pattern that did not compile and so filtered nothing, or masking that ran out of time
+    /// and so did not finish.
+    /// </remarks>
+    [JsonPropertyName("notes")]
+    public required IReadOnlyList<string> Notes { get; init; }
 
     /// <summary>The host.</summary>
     [JsonPropertyName("host")]

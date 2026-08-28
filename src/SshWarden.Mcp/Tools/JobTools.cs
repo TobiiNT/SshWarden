@@ -234,6 +234,7 @@ public sealed class JobTools
             NextLine = from + lines,
             Truncated = prepared.Truncated,
             RedactedValues = prepared.RedactedCount,
+            Notes = OutputNotes.For(prepared),
             Host = target.Name,
         };
     }
@@ -466,6 +467,17 @@ public sealed class PollJobResult
     /// <summary>How many credential-shaped values were masked. Best-effort.</summary>
     [JsonPropertyName("redacted_values")]
     public required int RedactedValues { get; init; }
+
+    /// <summary>
+    /// Anything that happened to this output which the text itself does not say.
+    /// </summary>
+    /// <remarks>
+    /// Empty in the ordinary case. A job's output is masked here and nowhere else - on the target
+    /// it is a plain file - so masking that ran out of time is the caller's only warning that what
+    /// came back may still hold a credential.
+    /// </remarks>
+    [JsonPropertyName("notes")]
+    public required IReadOnlyList<string> Notes { get; init; }
 
     /// <summary>The host.</summary>
     [JsonPropertyName("host")]

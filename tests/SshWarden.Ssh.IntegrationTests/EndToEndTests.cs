@@ -414,6 +414,86 @@ public sealed class EndToEndTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Tail_log_says_when_the_grep_pattern_did_not_run()
+    {
+        var log = Path.Combine(_allowed, "grep.log");
+        await File.WriteAllLinesAsync(log, ["alpha", "beta", "gamma"]);
+
+        // A pattern that will not compile, so the filter does not run and the whole log comes back.
+        // That is the opposite of what was asked for, and a caller told nothing about it reads
+        // three unfiltered lines as three matches. `run` had carried this note since it was
+        // written; the two read tools computed it and dropped it on the floor.
+        var result = await Call(
+            "tail_log",
+            new { host = "local-test", unitOrPath = log, grep = "(" });
+
+        var notes = result.GetProperty("notes").EnumerateArray().Select(note => note.GetString()!);
+
+        Assert.Contains(notes, note => note.Contains("grep pattern was not usable", StringComparison.Ordinal));
+
+        // And the unfiltered output really is what came back, which is what makes the note
+        // load-bearing rather than decorative.
+        Assert.Contains("alpha", result.GetProperty("lines").GetString()!, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Tail_log_says_nothing_when_the_grep_pattern_ran()
+    {
+        // The control for the test above. A note that shows up whatever happened carries no
+        // information, so the ordinary case has to be provably quiet.
+        var log = Path.Combine(_allowed, "grep-ok.log");
+        await File.WriteAllLinesAsync(log, ["alpha", "beta", "gamma"]);
+
+        var result = await Call(
+            "tail_log",
+            new { host = "local-test", unitOrPath = log, grep = "^beta$" });
+
+        Assert.Empty(result.GetProperty("notes").EnumerateArray());
+        Assert.Equal("beta", result.GetProperty("lines").GetString()!.Trim());
+    }
+
+    [Fact]
+    public async Task Read_file_carries_the_same_notes_field_as_the_other_tools()
+    {
+        // Empty here, and the point is that the field exists at all: the caller cannot be told
+        // masking did not finish by a tool with nowhere to say it.
+        var file = Path.Combine(_allowed, "notes.txt");
+        await File.WriteAllTextAsync(file, "nothing interesting\n");
+
+        var result = await Call("read_file", new { host = "local-test", path = file });
+
+        Assert.Empty(result.GetProperty("notes").EnumerateArray());
+    }
+
+    [Fact]
+    public async Task Read_file_takes_a_byte_budget_below_one_without_failing_opaquely()
+    {
+        // 0 reached the command builder, which throws ArgumentOutOfRangeException. That is not an
+        // McpException, so the SDK replaces the message with "An error occurred invoking
+        // 'read_file'." and the model is told something went wrong but not what - after a round
+        // trip to the host has already happened. Clamped, the way tail_log has always clamped its
+        // line count.
+        var file = Path.Combine(_allowed, "budget.txt");
+        await File.WriteAllTextAsync(file, "abcdef");
+
+        var result = await Call("read_file", new { host = "local-test", path = file, maxBytes = 0 });
+
+        Assert.Equal("a", result.GetProperty("content").GetString());
+    }
+
+    [Fact]
+    public async Task Read_file_reads_the_bytes_it_was_asked_for()
+    {
+        // The control: clamping the bottom must not have moved anything a caller would notice.
+        var file = Path.Combine(_allowed, "budget-ok.txt");
+        await File.WriteAllTextAsync(file, "abcdef");
+
+        var result = await Call("read_file", new { host = "local-test", path = file, maxBytes = 3 });
+
+        Assert.Equal("abc", result.GetProperty("content").GetString());
+    }
+
+    [Fact]
     public async Task Tail_log_refuses_a_unit_no_rule_covers()
     {
         // The rule names paths and no units, so every unit is refused - deny by default, with the

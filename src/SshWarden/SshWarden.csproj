@@ -19,6 +19,9 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="SshWarden.Tests" />
+    <!-- The pool's eviction is driven directly by its tests, and a pool test needs a real
+         server to have a connection to evict, so those live in the SSH suite. -->
+    <InternalsVisibleTo Include="SshWarden.Ssh.IntegrationTests" />
   </ItemGroup>
 
 </Project>

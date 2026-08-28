@@ -68,6 +68,16 @@ public static class HostFingerprint
     {
         digest = [];
 
+        // The prefix is checked here rather than only in IsValid, because Matches calls this
+        // directly. Slicing at the prefix length without asking whether there was one throws on
+        // anything shorter than "SHA256:" - and this method's whole contract is that a value it
+        // cannot read answers no, not that it raises out of the host key callback where the answer
+        // was needed.
+        if (!value.StartsWith(Prefix, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
         var encoded = value[Prefix.Length..];
         if (encoded.Length == 0)
         {
