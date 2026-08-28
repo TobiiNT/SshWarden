@@ -160,6 +160,31 @@ public sealed class JobCommandTests
     // a real shell instead: see the job tests in SshWarden.Ssh.IntegrationTests.
 
     [Fact]
+    public void The_exit_status_is_looked_for_again_once_the_process_is_gone()
+    {
+        // A poll asks two questions, and a job can finish between them: no exit status yet, then
+        // the process ends, then the liveness test finds nothing alive. Answered from those two
+        // alone that reads as `gone` - signalled, or the machine restarted - for a job that
+        // finished and left its output behind, and `gone` is terminal, so the caller stops asking.
+        //
+        // This assertion is the weak half of a pair, like the kill one below: a string check cannot
+        // know what a shell does with an interleaving.
+        // A_job_that_finishes_while_a_poll_is_reading_it_is_finished_rather_than_gone in the
+        // integration suite is what settles it, by holding the window open with a fifo. This is
+        // here so the reason sits with the command.
+        var command = JobCommands.Poll(".sshwarden/jobs/x", sinceLine: 0);
+
+        var exit = $"\"$HOME\"/'.sshwarden/jobs/x/{JobCommands.ExitFile}'";
+
+        Assert.Equal(2, Occurrences(command, $"[ -s {exit} ]"));
+
+        // Empty is not finished. The file exists from the moment the redirection creates it and
+        // holds a status a moment later, so `-f` answers finished with no exit code at all for a
+        // status that is still being written.
+        Assert.DoesNotContain($"[ -f {exit} ]", command, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Killing_signals_the_group_rather_than_the_leader()
     {
         // Killing only the leader of `a | b | c` leaves the rest running and reports success.
@@ -259,6 +284,20 @@ public sealed class JobCommandTests
 
         Assert.Equal(JobStatuses.Gone, parsed.Status);
         Assert.Null(parsed.ExitCode);
+    }
+
+    private static int Occurrences(string text, string value)
+    {
+        var count = 0;
+
+        for (var at = text.IndexOf(value, StringComparison.Ordinal);
+             at >= 0;
+             at = text.IndexOf(value, at + value.Length, StringComparison.Ordinal))
+        {
+            count++;
+        }
+
+        return count;
     }
 }
 

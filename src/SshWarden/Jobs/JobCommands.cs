@@ -146,10 +146,35 @@ public static class JobCommands
     /// <exception cref="ArgumentException"><paramref name="directory" /> is null or whitespace.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="sinceLine" /> is negative.</exception>
     /// <remarks>
+    /// <para>
     /// Status first and on its own line, then the output, so one round trip answers both and the
     /// parser never has to guess where one ends. The status has four values rather than two:
     /// a job that is not running and left no exit status is not the same as one that finished, and
     /// a job whose directory is gone is not an error.
+    /// </para>
+    /// <para>
+    /// <strong>The exit status is tested twice, and the second test is the whole point.</strong> A
+    /// poll asks the target two questions, and a job can finish between them: the first found no
+    /// exit status, the job then ended, and the liveness test found nothing alive. Answered from
+    /// those two alone that reads as <c>gone</c>, which tells the caller the job was signalled or
+    /// the machine restarted, when in fact it finished, wrote its exit status and printed
+    /// everything it was going to. <c>gone</c> is terminal, so the caller stops asking and the
+    /// output is never collected. The wrapper writes the exit status before the shell that wrote it
+    /// exits, so a second look taken after the process is known to be gone cannot miss it.
+    /// </para>
+    /// <para>
+    /// Seen on CI on 2026-08-28: <c>A_job_outlives_the_call_that_started_it</c> read <c>gone</c> for
+    /// a job that had finished, and did not reproduce in two full runs of the suite on the machine
+    /// it was written on. Which of the two paths to that status fired is not recoverable from the
+    /// log, and this is the one reachable by construction, so it is the one closed here and the one
+    /// the test in <c>SshWarden.Ssh.IntegrationTests</c> opens deliberately rather than races for.
+    /// </para>
+    /// <para>
+    /// <c>-s</c> rather than <c>-f</c> is the same defect one step earlier: the exit file exists
+    /// from the moment the redirection creates it and holds a status a moment later, so a poll
+    /// landing between the two answers <c>finished</c> with no exit code at all. Empty is not
+    /// finished; while the shell writing it is alive it is <c>running</c>.
+    /// </para>
     /// </remarks>
     public static string Poll(string directory, int sinceLine)
     {
@@ -162,8 +187,9 @@ public static class JobCommands
         var exit = InHome(directory, ExitFile);
 
         return $"if [ ! -d {dir} ]; then echo '{JobStatuses.Vanished} '; else "
-            + $"if [ -f {exit} ]; then echo \"{JobStatuses.Finished} $(cat {exit})\"; "
+            + $"if [ -s {exit} ]; then echo \"{JobStatuses.Finished} $(cat {exit})\"; "
             + $"elif kill -0 \"$(cat {pid} 2>/dev/null)\" 2>/dev/null; then echo '{JobStatuses.Running} '; "
+            + $"elif [ -s {exit} ]; then echo \"{JobStatuses.Finished} $(cat {exit})\"; "
             + $"else echo '{JobStatuses.Gone} '; fi; "
             + $"tail -n +{sinceLine + 1} -- {output} 2>/dev/null; fi";
     }
