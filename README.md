@@ -133,6 +133,18 @@ Every push to main publishes `ghcr.io/tobiint/sshwarden` at the commit sha and a
 once from `latest`, then pin the sha you got: `latest` moves under a running host, which makes
 "which build is serving this" unanswerable at the moment somebody asks.
 
+Each of those images carries a provenance attestation, so "are these the bytes this repository built"
+has an answer that does not require trusting the registry or whoever can write to it:
+
+```bash
+gh attestation verify oci://ghcr.io/tobiint/sshwarden:latest --repo TobiiNT/SshWarden
+```
+
+Worth running rather than skipping, because what you are about to give SSH access to your production
+hosts is this image. Provenance starts with the image this paragraph shipped in: the ones before it
+were pushed while this repository was private, where GitHub does not persist attestations, and they
+carry none.
+
 **Two defaults need different values in a container**, and both are commented where you change them.
 `server.listen` has to be `0.0.0.0:8760`, because a published port forwards to the container's own
 address and not to its loopback; the compose file pins the host half of the mapping to `127.0.0.1`
