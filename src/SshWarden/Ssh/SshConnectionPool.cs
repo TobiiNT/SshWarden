@@ -257,12 +257,15 @@ public sealed class SshConnectionPool : IAsyncDisposable
     /// <para>
     /// <strong>Removing it cost two races, and this is what they were.</strong> A caller reads its
     /// entry out of the dictionary and then waits on that entry's gate, and those are two steps. A
-    /// sweep landing between them used to remove the entry and dispose the gate underneath it:
-    /// disposing a semaphore somebody is waiting on does not hand that waiter an error, it simply
-    /// never completes, so the tool call hung rather than failed. And a caller that got through
-    /// would reconnect onto an entry no longer in the dictionary, leaving a live connection nothing
-    /// would ever close - the leak the gate exists to prevent, reached through the gate. Neither is
-    /// a guard that was missing; both are what removing an object other threads already hold means.
+    /// sweep landing between them used to remove the entry and dispose the gate underneath it, and
+    /// what the caller got depended only on how far it had reached. Measured on .NET 10,
+    /// 2026-08-28: a waiter already queued when <c>Dispose</c> runs is never completed and never
+    /// faulted, so the tool call hangs; a <c>WaitAsync</c> entered after it throws
+    /// <see cref="ObjectDisposedException" />. The hang is the worse of the two and the harder to
+    /// read from a log. And a caller that got through either would reconnect onto an entry no
+    /// longer in the dictionary, leaving a live connection nothing would ever close - the leak the
+    /// gate exists to prevent, reached through the gate. Neither is a guard that was missing; both
+    /// are what removing an object other threads already hold means.
     /// </para>
     /// <para>
     /// <strong>The cutoff is a parameter rather than read from the field</strong> so the decision
