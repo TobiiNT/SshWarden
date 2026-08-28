@@ -1,7 +1,9 @@
+using System.Diagnostics;
 using System.Globalization;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Text;
 using System.Text.Json;
 
 using Microsoft.AspNetCore.Builder;
@@ -44,6 +46,7 @@ public sealed class EndToEndTests : IAsyncLifetime
     private HttpClient _client = null!;
     private string _auditPath = null!;
     private string _directory = null!;
+    private string _remoteJobs = null!;
 
     public async Task InitializeAsync()
     {
@@ -124,6 +127,10 @@ public sealed class EndToEndTests : IAsyncLifetime
                 RetentionMinutes = 60,
             },
         };
+
+        // Read off the configuration rather than repeated as a literal, so a test that goes looking
+        // for a job's directory on disk looks where this deployment actually puts it.
+        _remoteJobs = configuration.Jobs.RemoteDirectory;
 
         var builder = WebApplication.CreateSlimBuilder();
         builder.WebHost.UseTestServer();
@@ -675,6 +682,74 @@ public sealed class EndToEndTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_job_that_finishes_while_a_poll_is_reading_it_is_finished_rather_than_gone()
+    {
+        // A poll asks the target two questions - has the job left an exit status, and is its
+        // process still alive - and a job can finish between them. Answered from those two alone
+        // that reads as `gone`, which is what a caller is told when a job was signalled or the
+        // machine restarted, and it is terminal: the caller stops asking and never collects the
+        // output sitting on the target. Seen on CI on 2026-08-28, as
+        // A_job_outlives_the_call_that_started_it reading `gone` where it had waited for finished.
+        //
+        // The window is opened deliberately rather than raced for. The pid file is replaced by a
+        // fifo, so the `cat` that reads it blocks until this test writes to the other end - and
+        // that open is itself the signal that the first question has already been asked and
+        // answered no. Waiting on the work rather than on a clock, where the work is the target's.
+        //
+        // The control is A_job_is_killed_as_a_whole_process_group above: a job that really did end
+        // without a status still reads `gone`, so this is not a fix that answers finished always.
+        var started = await Call("start_job", new { host = "local-test", cmd = "sleep 60" });
+        var jobId = started.GetProperty("job_id").GetString()!;
+
+        // The target is this machine over a loopback ssh, so the account's home is this process's.
+        var directory = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), _remoteJobs, jobId);
+
+        var pidPath = Path.Combine(directory, JobCommands.PidFile);
+        var exitPath = Path.Combine(directory, JobCommands.ExitFile);
+
+        // The job's own pid, kept and handed back below: `kill -0` on it answers no because that
+        // process really is gone, rather than because the number was invented.
+        var pid = (await File.ReadAllTextAsync(pidPath)).Trim();
+
+        // Killed first, so nothing of the job's is still writing into the directory while this test
+        // stages it. Signalled as a group, the wrapper dies with it and never reaches its
+        // `echo $? > exit`, which is what leaves the first question to answer no.
+        _ = await Call("kill_job", new { jobId });
+
+        File.Delete(pidPath);
+        MakeFifo(pidPath);
+
+        Assert.False(
+            File.Exists(exitPath),
+            "The job left an exit status behind, so the poll answers on its first question and this "
+                + "test would prove nothing.");
+
+        var polling = Call("poll_job", new { jobId, sinceLine = 0 });
+
+        // Blocks until the target's `cat` opens the far end. The timeout is a hang guard rather
+        // than an assertion about how long anything takes: if that open never happens there is
+        // nothing to wake this thread, and a test that fails is better than a suite that stops.
+        var opened = await Task.Run(
+                () => new FileStream(pidPath, FileMode.Open, FileAccess.Write, FileShare.ReadWrite))
+            .WaitAsync(TimeSpan.FromSeconds(30));
+
+        await using (opened)
+        {
+            // The job finishes here, inside the window: its exit status is on disk, and the process
+            // that wrote it was already gone before the liveness question could be answered.
+            await File.WriteAllTextAsync(exitPath, "0\n");
+
+            await opened.WriteAsync(Encoding.UTF8.GetBytes(pid + "\n"));
+        }
+
+        var polled = await polling;
+
+        Assert.Equal(JobStatuses.Finished, polled.GetProperty("status").GetString());
+        Assert.Equal(0, polled.GetProperty("exit_code").GetInt32());
+    }
+
+    [Fact]
     public async Task A_secret_a_job_printed_is_masked_on_the_way_back()
     {
         // The only point at which a job's output can be masked at all. On the target it is a plain
@@ -872,6 +947,28 @@ public sealed class EndToEndTests : IAsyncLifetime
         // The decoded message rather than the JSON around it, so an assertion about the words the
         // caller reads is not quietly satisfied - or defeated - by escaping.
         return result.GetProperty("content")[0].GetProperty("text").GetString()!;
+    }
+
+    /// <summary>Creates a fifo, which the framework has no API for.</summary>
+    /// <remarks>
+    /// Fails rather than skips when there is nothing to create one with, for the same reason the
+    /// fixture fails without an sshd: a test that skips itself is green in exactly the situation
+    /// where it measured nothing.
+    /// </remarks>
+    private static void MakeFifo(string path)
+    {
+        using var process = Process.Start(new ProcessStartInfo("mkfifo")
+        {
+            ArgumentList = { path },
+            RedirectStandardError = true,
+            UseShellExecute = false,
+        }) ?? throw new InvalidOperationException("mkfifo did not start.");
+
+        process.WaitForExit();
+
+        Assert.True(
+            process.ExitCode == 0,
+            $"mkfifo {path} failed: " + process.StandardError.ReadToEnd());
     }
 
     private async Task<JsonElement> Call(string tool, object arguments)
