@@ -6,8 +6,7 @@
   </PropertyGroup>
 
   <!--
-    No ASP.NET Core and no MCP SDK here - deliberately, and it is the same absence Boltway keeps
-    between its resource server and its authorization server. The authenticator seam, the grant
+    No ASP.NET Core and no MCP SDK here - deliberately. The authenticator seam, the grant
     table and the command builder are the security decisions of this project, and they are worth
     being able to test without standing up a web host. Something that needs the request pipeline
     belongs in SshWarden.Mcp.

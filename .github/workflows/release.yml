@@ -24,7 +24,7 @@
 # to stop a workflow triggering itself forever, and the consequence is silent: the obvious design,
 # "cut the tag and let something else notice it", produces a green run, a tag in the repository, and
 # nothing else. Nothing reports it. So the work that follows the tag is a job in this file behind
-# `needs:`, not a second workflow with a `push: tags` trigger. Boltway paid for that one.
+# `needs:`, not a second workflow with a `push: tags` trigger. That one was paid for elsewhere.
 
 name: release
 

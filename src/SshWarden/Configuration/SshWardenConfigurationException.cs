@@ -7,8 +7,7 @@ namespace SshWarden.Configuration;
 /// <para>
 /// Carries <strong>every</strong> problem found, not the first one. A loader that stops at the
 /// first mistake turns fixing a config file into one restart per line, and the operator doing that
-/// is usually the one who has just been paged. Boltway's startup validation was built the same way
-/// for the same reason.
+/// is usually the one who has just been paged.
 /// </para>
 /// <para>
 /// Nothing here quotes a credential. The problems name keys and rules, never values, because this

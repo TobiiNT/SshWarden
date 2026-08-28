@@ -17,8 +17,7 @@ namespace SshWarden.Ssh.IntegrationTests;
 /// </para>
 /// <para>
 /// <strong>It fails rather than skips when there is no <c>sshd</c> to run.</strong> A suite that
-/// skips itself is green in exactly the situation where it measured nothing, which is the same
-/// reason Boltway's storage suite refuses to skip without a database.
+/// skips itself is green in exactly the situation where it measured nothing.
 /// </para>
 /// </remarks>
 public sealed class LocalSshServer : IDisposable

@@ -5,11 +5,11 @@ namespace SshWarden.Auth;
 /// </summary>
 /// <remarks>
 /// <para>
-/// In core rather than beside the document, because two assemblies need the same answer: the
-/// generic OAuth mode maps the routes and names the URL in its challenge, and the Boltway mode
-/// names it in a challenge of its own. Two copies of this arithmetic would agree until one of them
-/// learned something, and what they would disagree about is the single most-failed requirement in
-/// the specification.
+/// In core rather than beside the document, because the assembly that maps the routes and the code
+/// that names the URL in a challenge are not always the same one, and an adapter a deployment writes
+/// itself is not on the reference path of either. Two copies of this arithmetic would agree until
+/// one of them learned something, and what they would disagree about is the single most-failed
+/// requirement in the specification.
 /// </para>
 /// <para>
 /// <strong>String surgery throughout, never <see cref="Uri" />.</strong> §6 forbids Unicode

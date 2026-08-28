@@ -318,8 +318,8 @@ path = "/metrics"
 # below.
 #
 #   # Which claim carries what. The first two default to RFC 9068's names; the third
-#   # has no RFC, so name what your server emits - `gid` on Boltway, `sid` on a server
-#   # exposing its session id. If yours emits nothing of the kind, set it to `sub`
+#   # has no RFC, so name what your server emits: some call it `gid`, some `sid` when
+#   # what they expose is a session id. If yours emits nothing of the kind, set it to `sub`
 #   # deliberately: that groups every session of one person together, which is coarser
 #   # than the audit record was designed for and is a choice you can see here rather
 #   # than one the library made quietly.

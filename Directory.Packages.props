@@ -11,41 +11,14 @@
 
   <ItemGroup Label="MCP">
     <!--
-      The transport. 2.2.0 is what Boltway.Mcp 0.2.0 and later depend on at >= 2.2.0, so pinning
-      anything lower here is NU1605 the moment step 8 of docs/DESIGN.md §7 adds that reference - a
-      package downgrade, which is an error in this repository rather than a warning. Another consumer
-      found that out by restoring rather than by reading: these two versions are one decision, and
-      the one written down here is the one that has to move first.
+      The transport. 2.2.0 was first pinned to stay above what a since-removed dependency demanded.
+      That reason is gone; the one below it is not, and is why the number has not moved back.
 
       2.2.0 is also where `WithRequestFilters` / `AddCallToolFilter` / `AddListToolsFilter` live,
       which is the single place docs/DESIGN.md §6.5.5 puts the per-tool gate. Step 2 depends on it.
     -->
     <PackageVersion Include="ModelContextProtocol.AspNetCore" Version="2.2.0" />
 
-    <!-- **The only Boltway package left here, and it is a test dependency.**
-
-         Boltway.ResourceServer and Boltway.OAuth.Net used to be shipped dependencies, of an
-         assembly that validated Boltway's tokens with Boltway's own code. That assembly is gone:
-         Boltway is an authorization server somebody deploys, and what reaches this process from it
-         is a JWT, a JWKS document and an RFC 9728 resource identifier. All three are standards
-         src/SshWarden.OAuth already speaks, and pointing it at a Boltway issuer needs one config
-         line rather than a second implementation. See docs/DESIGN.md §6.2.
-
-         What this one carries is RFC 9728 conformance run against a wired pipeline: eight
-         assertions over an HttpClient, a resource identifier and one protected path, with no
-         Boltway type in its surface. The defect it exists to catch, a host whose authentication
-         middleware does not read the framework's anonymous marker so the discovery document answers
-         401, is one SshWarden.OAuth can have as easily as anything else.
-
-         **It stays a test dependency.** src/SshWarden.OAuth references nothing from Boltway and
-         must not begin to, because a deployment on some other authorization server is the case that
-         assembly exists for. Deriving a conformance suite from a project is not the same as
-         depending on it.
-
-         Pinned exactly rather than to a range: a published version is frozen forever, so naming one
-         is naming a tree somebody can go and read, and a range would let a consumer's restore pick
-         a version this was never built against. -->
-    <PackageVersion Include="Boltway.ResourceServer.Testing" Version="0.4.0" />
   </ItemGroup>
 
   <ItemGroup Label="Configuration">
@@ -60,8 +33,8 @@
 
       Tomlyn is BSD-2-Clause, and its parse failure carries every diagnostic with a line and column
       rather than only the first - which is what lets the loader's refusal name the line it refused
-      instead of asking the operator to find it (docs/DESIGN.md's "a refusal names its boundary",
-      inherited from Boltway's CLAUDE.md). Measured against 2.10.1 on 2026-08-26: a truncated table
+      instead of asking the operator to find it (docs/DESIGN.md's "a refusal names its boundary").
+      Measured against 2.10.1 on 2026-08-26: a truncated table
       header reports `(1,8) : error : Expected `]` but was ...`.
 
       **What to know before moving off this version.** 2.x targets TOML 1.1.0 and its own readme says

@@ -573,9 +573,9 @@ step 8 landing and 2026-08-27 the challenge carried nothing at all: no `scope`, 
 `resource_metadata`, so a client meeting this server for the first time was told it needed a
 credential and never told where to read about getting one. The metadata document was served
 correctly at both well-known forms the whole time, which is exactly why nothing noticed; every unit
-test passed, because no unit was wrong. It was found by deriving the RFC 9728 pipeline contract from
-`Boltway.ResourceServer.Testing`, which asserts against a wired application rather than a unit, and
-went red on the one assertion that ties the document to the challenge that should point at it.
+test passed, because no unit was wrong. It was found by writing the RFC 9728 contract as a suite
+that asserts against a wired application rather than a unit, which went red on the one assertion
+that ties the document to the challenge that should point at it.
 
 The challenge now carries both, and the scope parameter is the configured list
 whole - which is the same set a client would have reached by the fallback above, stated rather than

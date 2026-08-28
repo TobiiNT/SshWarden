@@ -32,9 +32,9 @@ updates:
 
   # The packages, not grouped.
   #
-  # `Directory.Packages.props` pins every version exactly, and the two Boltway packages carry a
-  # comment saying a range "would let a consumer's restore pick a version this was never built
-  # against". A grouped pull request turns that into one accept-or-reject over the lot; separate
+  # `Directory.Packages.props` pins every version exactly, because a range would let a consumer's
+  # restore pick a version this was never built against. A grouped pull request turns that into one
+  # accept-or-reject over the lot; separate
   # ones make each bump a diff somebody looked at, which is what the pinning was for.
   #
   # This is a server that opens shells on other people's hosts. A silent bump to the token handling

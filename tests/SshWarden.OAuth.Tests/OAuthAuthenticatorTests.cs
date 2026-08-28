@@ -39,9 +39,9 @@ public sealed class OAuthAuthenticatorTests
     [Fact]
     public async Task The_claim_names_come_from_configuration()
     {
-        // The whole reason this assembly exists beside the Boltway one. RFC 9068 names client_id and
-        // jti; nothing names the one that groups a session, so an authorization server spelling them
-        // differently is configuration rather than a fork.
+        // The whole reason this assembly reads the names from configuration. RFC 9068 names
+        // client_id and jti; nothing names the one that groups a session, so an authorization server
+        // spelling them differently is a config line rather than a second adapter.
         var options = Options("caller_id", "tid", "sid");
 
         var principal = Principal(claims:
