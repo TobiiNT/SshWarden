@@ -115,7 +115,12 @@ public sealed class ReadTools
 
         // The smaller of what the caller asked for and what this deployment allows. Bounded on the
         // target as well, so a huge file is not moved across the network to be discarded here.
-        var budget = Math.Min(maxBytes ?? _output.MaxBytes, _output.MaxBytes);
+        //
+        // Clamped at the bottom too, the way tail_log has always clamped its line count. A zero or
+        // negative budget reached the command builder, whose ArgumentOutOfRangeException is not an
+        // McpException - so the SDK replaced the message and the caller was told only that
+        // something went wrong, after a round trip to the host had already happened.
+        var budget = Math.Clamp(maxBytes ?? _output.MaxBytes, 1, _output.MaxBytes);
 
         var outcome = await RunAsync(
             caller, ToolNames.ReadFile, startedAt, target, resolved.Grant, path,

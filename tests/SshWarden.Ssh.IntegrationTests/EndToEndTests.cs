@@ -466,6 +466,34 @@ public sealed class EndToEndTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Read_file_takes_a_byte_budget_below_one_without_failing_opaquely()
+    {
+        // 0 reached the command builder, which throws ArgumentOutOfRangeException. That is not an
+        // McpException, so the SDK replaces the message with "An error occurred invoking
+        // 'read_file'." and the model is told something went wrong but not what - after a round
+        // trip to the host has already happened. Clamped, the way tail_log has always clamped its
+        // line count.
+        var file = Path.Combine(_allowed, "budget.txt");
+        await File.WriteAllTextAsync(file, "abcdef");
+
+        var result = await Call("read_file", new { host = "local-test", path = file, maxBytes = 0 });
+
+        Assert.Equal("a", result.GetProperty("content").GetString());
+    }
+
+    [Fact]
+    public async Task Read_file_reads_the_bytes_it_was_asked_for()
+    {
+        // The control: clamping the bottom must not have moved anything a caller would notice.
+        var file = Path.Combine(_allowed, "budget-ok.txt");
+        await File.WriteAllTextAsync(file, "abcdef");
+
+        var result = await Call("read_file", new { host = "local-test", path = file, maxBytes = 3 });
+
+        Assert.Equal("abc", result.GetProperty("content").GetString());
+    }
+
+    [Fact]
     public async Task Tail_log_refuses_a_unit_no_rule_covers()
     {
         // The rule names paths and no units, so every unit is refused - deny by default, with the
