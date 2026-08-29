@@ -126,6 +126,10 @@ hosts = ["dev-*"]
 # The account commands under this rule run as, and the boundary that cannot be worked around.
 # Everything else here refuses early and writes a clear record, inside a process the target host
 # does not trust and cannot verify. Give it its own narrow account.
+#
+# Setting this to `root` is not refused - a deployment can have a reason - but startup says so once.
+# For `run` and `start_job` there is nothing between the caller and the host except this account, so
+# at `root` the rest of the rule records what was intended rather than what is possible.
 ssh_user = "deploy"
 
 # A second rule, for reading rather than running. Note that it maps to a different unix account:
