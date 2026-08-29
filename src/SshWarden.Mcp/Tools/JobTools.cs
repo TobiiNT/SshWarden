@@ -131,9 +131,17 @@ public sealed class JobTools
         if (outcome.ExitCode != 0)
         {
             // Named rather than handed back as a bare number. The three the start command chooses
-            // for itself are the three that are worth telling apart - a directory that could not be
-            // made, a working directory that does not exist, and a job that never came up - and
-            // anything else is the target's own, so its stderr goes with it.
+            // for itself are the three worth telling apart - a directory that could not be made, a
+            // working directory that does not exist, and a job that never came up - and anything
+            // else is the target's own, reported as its exit code.
+            //
+            // The target's stderr is not quoted, the same channel read_file and tail_log stopped
+            // quoting. It reaches the caller and its provider's transcript, and the SecretRedactor
+            // that would mask it is best-effort - the second line, on a stream the first (the
+            // account not being able to read) does not cover - so a secret the caller's command
+            // carried, of the kind the registry masks that command for below, would ride out on it
+            // untouched. A quoting fault in the command is still diagnosable with `run`, whose
+            // output goes back through the pipeline that reports when masking did not finish.
             var why = outcome.ExitCode switch
             {
                 JobCommands.DirectoryFailed =>
@@ -145,12 +153,8 @@ public sealed class JobTools
                 _ => $"the target answered with exit code {outcome.ExitCode}",
             };
 
-            var detail = string.IsNullOrWhiteSpace(outcome.Stderr)
-                ? string.Empty
-                : $" The target said: {SecretRedactor.Redact(outcome.Stderr.Trim()).Text}";
-
             throw new McpException(
-                $"SshWarden could not start the job on host '{target.Name}': {why}.{detail}");
+                $"SshWarden could not start the job on host '{target.Name}': {why}.");
         }
 
         var record = new JobRecord

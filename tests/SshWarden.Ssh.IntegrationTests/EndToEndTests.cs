@@ -720,8 +720,8 @@ public sealed class EndToEndTests : IAsyncLifetime
         // The half of the wait that is observable. Without it `start_job` returns before the job
         // exists, so a command the target's shell cannot even parse is accepted, an identifier is
         // handed back for a job that will never run, and the caller finds out at some later poll -
-        // as `gone`, with no output and nothing saying why. With it the shell's own complaint comes
-        // back from the call that caused it.
+        // as `gone`, with no output and nothing saying why. With it the failure is reported from the
+        // call that caused it, rather than surfacing as a later `gone` poll.
         //
         // The control is A_job_command_containing_quotes_survives_the_wrapper: a command with the
         // same quoting that is valid starts and runs.
@@ -733,10 +733,13 @@ public sealed class EndToEndTests : IAsyncLifetime
 
         Assert.Contains("did not start", refusal, StringComparison.Ordinal);
 
-        // Verbatim from the target rather than reworded here. Which line of a nested wrapper the
-        // shell is complaining about is the only thing that locates a quoting fault, and this
-        // server is not the one that can tell.
-        Assert.Contains("Syntax error", refusal, StringComparison.Ordinal);
+        // And not the target's own words. Quoting the shell's stderr used to locate a quoting fault
+        // by line, but it is the channel read_file and tail_log stopped quoting: on failure it put
+        // target output into a caller-facing message masked only best-effort, and a secret the
+        // command carried would ride out on it. The category above ("did not start") is what this
+        // call reports; a quoting fault is diagnosed with `run`, whose output goes through the
+        // masking pipeline. This assertion is red against the version that quoted stderr.
+        Assert.DoesNotContain("Syntax error", refusal, StringComparison.Ordinal);
     }
 
     [Fact]
