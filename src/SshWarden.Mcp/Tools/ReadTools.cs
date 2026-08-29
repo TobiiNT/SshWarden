@@ -129,6 +129,7 @@ public sealed class ReadTools
         var prepared = OutputPipeline.Prepare(outcome.Stdout, grep: null, _output.MaxBytes);
 
         Record(caller, ToolNames.ReadFile, startedAt, resolved.Grant, target, path, resolved.Path, outcome, prepared);
+        RefuseIfUnread(outcome, target, resolved.Grant, resolved.Path);
 
         return new ReadFileResult
         {
@@ -203,6 +204,7 @@ public sealed class ReadTools
             Record(
                 caller, ToolNames.TailLog, startedAt, unitGrant, target,
                 unitOrPath, resolvedPath: null, unitOutcome, unitPrepared);
+            RefuseIfUnread(unitOutcome, target, unitGrant, unitOrPath);
 
             return Result(unitOrPath, resolvedPath: null, target, unitGrant, unitOutcome, unitPrepared);
         }
@@ -223,6 +225,7 @@ public sealed class ReadTools
         Record(
             caller, ToolNames.TailLog, startedAt, resolvedPath.Grant, target,
             unitOrPath, resolvedPath.Path, outcome, prepared);
+        RefuseIfUnread(outcome, target, resolvedPath.Grant, resolvedPath.Path);
 
         return Result(unitOrPath, resolvedPath.Path, target, resolvedPath.Grant, outcome, prepared);
     }
@@ -416,6 +419,28 @@ public sealed class ReadTools
                 selector: selector));
 
             throw;
+        }
+    }
+
+    /// <summary>Refuses a read whose command did not succeed on the target.</summary>
+    /// <remarks>
+    /// <para>
+    /// <b>After <see cref="Record" />, never before.</b> The call happened, it reached the host and
+    /// the host answered, so the audit line is owed whichever way this goes - and the exit code
+    /// that decides this is one of the fields that record carries. Throwing first would leave the
+    /// one call somebody comes looking for as the one the log does not have.
+    /// </para>
+    /// <para>
+    /// The resolved path rather than the caller's string, where there is one: a symlink is
+    /// followed before the read, so the file that refused is the resolved one and naming the other
+    /// sends the reader to a path whose permissions are fine.
+    /// </para>
+    /// </remarks>
+    private static void RefuseIfUnread(CommandOutcome outcome, HostEntry target, Grant grant, string selector)
+    {
+        if (ReadOutcome.Problem(outcome, target.Name, grant.SshUser, selector) is { } problem)
+        {
+            throw new McpException(problem);
         }
     }
 
