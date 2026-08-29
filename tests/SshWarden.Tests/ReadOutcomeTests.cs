@@ -52,14 +52,18 @@ public sealed class ReadOutcomeTests
 
         Assert.NotNull(problem);
 
-        // Which file, which host, which account, and what the target itself said. The account is
-        // in it because that is the boundary that refused: the grant table allowed this path, and
-        // the unix layer did not, and a reader who is told only "could not read" goes and edits
-        // the wrong one of the two.
+        // Which file, which host, which account. The account is in it because that is the boundary
+        // that refused: the grant table allowed this path, and the unix layer did not, and a reader
+        // told only "could not read" goes and edits the wrong one of the two.
         Assert.Contains(Selector, problem, StringComparison.Ordinal);
         Assert.Contains(Host, problem, StringComparison.Ordinal);
         Assert.Contains(User, problem, StringComparison.Ordinal);
-        Assert.Contains("Permission denied", problem, StringComparison.Ordinal);
+
+        // And not the target's stderr. Quoting it is the channel this change removed: on failure it
+        // put host output into a caller-facing message held back only by best-effort masking. This
+        // assertion is red against the version that quoted it; the boundary above is named without
+        // the target's words.
+        Assert.DoesNotContain("Permission denied", problem, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -86,35 +90,22 @@ public sealed class ReadOutcomeTests
     }
 
     [Fact]
-    public void A_credential_in_the_target_error_is_masked_before_it_is_quoted()
+    public void A_secret_in_the_target_error_never_reaches_the_caller()
     {
-        // The target's stderr is output like any other, and this one is quoted into a message that
-        // reaches the caller and the audit log. A connection string in a failed read would
-        // otherwise travel further than the read ever would have.
+        // The red-before-change case, and the reason this is "do not quote stderr" rather than
+        // "mask it harder". SecretRedactor is best-effort and anchored: a secret in a shape it does
+        // not know - here a password that is neither part of a URL nor a KEY=value assignment - goes
+        // through it untouched. The earlier version quoted the first line of stderr into this
+        // message, so that secret reached the caller and its provider's transcript. Not quoting
+        // stderr at all is what closes the channel, and this asserts the close, not the masking.
         var problem = ReadOutcome.Problem(
-            Outcome(exitCode: 1, stderr: "psql: postgres://appuser:hunter2@db.example.test:5432/app failed"),
+            Outcome(exitCode: 1, stderr: "tail: could not read config: db password is hunter2"),
             Host,
             User,
             Selector);
 
         Assert.NotNull(problem);
         Assert.DoesNotContain("hunter2", problem, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void A_long_error_is_cut_rather_than_pasted_whole()
-    {
-        // stderr is not bounded by anything upstream, and this message goes into an exception and
-        // an audit line. One line, bounded, is what a reader can act on.
-        var problem = ReadOutcome.Problem(
-            Outcome(exitCode: 1, stderr: new string('x', 4000) + "\nsecond line"),
-            Host,
-            User,
-            Selector);
-
-        Assert.NotNull(problem);
-        Assert.True(problem.Length < 1000, $"message was {problem.Length} characters");
-        Assert.DoesNotContain("second line", problem, StringComparison.Ordinal);
     }
 
     private static CommandOutcome Outcome(int? exitCode, string stdout = "", string stderr = "")
