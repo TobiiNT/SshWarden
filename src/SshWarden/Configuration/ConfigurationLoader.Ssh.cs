@@ -398,6 +398,32 @@ public static partial class ConfigurationLoader
                         + "process the target host does not trust.");
             }
 
+            // **Warned, never refused.** An on-premises deployment can have a real reason to run
+            // as the superuser, and a default is not a policy - so this says it once, out loud, and
+            // then gets out of the way.
+            //
+            // It earns its place because of what the account is: `paths` and `units` do not reach
+            // `run` or `start_job` (DESIGN.md 6.5.1), so for those two the ssh_user is the whole of
+            // the gate, and every other line in the rule then describes intent rather than
+            // capability. That made it the one setting in this file with no validation at all,
+            // which is a strange place for the only real boundary to sit.
+            //
+            // Matched ordinally and exactly, because a unix username is case-sensitive: `Root` is a
+            // different account, and warning about it would be a claim about the target's passwd
+            // file that this process has never read. The same limit is why the message says what it
+            // did not check rather than implying a clean bill of health.
+            if (string.Equals(sshUser, "root", StringComparison.Ordinal))
+            {
+                warnings.Add(
+                    $"{where}.ssh_user is 'root', so this rule's commands run as the superuser. "
+                        + "'paths' and 'units' do not apply to 'run' or 'start_job', so for those "
+                        + "tools the account is the only gate there is and the rest of this rule "
+                        + "records intent rather than capability. Not checked: whether some other "
+                        + "account named in this file is uid 0, or reaches root through sudo or the "
+                        + "docker group. SshWarden has never read the target's passwd or group "
+                        + "files, so this matches the name and nothing else.");
+            }
+
             if (tools is null || tools.Count == 0)
             {
                 problems.Add($"{where}.tools is empty, so this rule allows nothing.");

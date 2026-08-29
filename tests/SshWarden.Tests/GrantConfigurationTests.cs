@@ -278,6 +278,59 @@ public sealed class GrantConfigurationTests
     }
 
     [Fact]
+    public void A_rule_running_as_root_is_loaded_with_a_warning()
+    {
+        // The account is the boundary. DESIGN.md 6.5.1: `paths` and `units` do not reach `run` or
+        // `start_job`, so for those two the ssh_user is the only gate there is - and it was the one
+        // setting in the file that nothing looked at.
+        using var file = TempConfigFile.Write($"""
+            {Auth}
+
+            {Ssh}
+
+            [[grant]]
+            id = "everything"
+            subject = "someone"
+            tools = ["run"]
+            hosts = ["dev-web-1"]
+            ssh_user = "root"
+            """);
+
+        var loaded = ConfigurationLoader.Load(file.Path);
+
+        Assert.Contains(
+            loaded.Warnings,
+            w => w.Contains("commands run as the superuser", StringComparison.Ordinal));
+
+        // Warned, not refused. An on-premises deployment can have a real reason to run as root, and
+        // a default is not a policy - so this says it out loud once and then gets out of the way.
+        Assert.NotEmpty(loaded.Configuration.Grants);
+    }
+
+    [Fact]
+    public void A_rule_running_as_an_ordinary_account_is_not_warned_about()
+    {
+        // The control. A warning that fires on every rule has measured nothing, and the next person
+        // to read a startup log learns to skip the line.
+        using var file = TempConfigFile.Write($"""
+            {Auth}
+
+            {Ssh}
+
+            [[grant]]
+            id = "narrow"
+            subject = "someone"
+            tools = ["run"]
+            hosts = ["dev-web-1"]
+            ssh_user = "deploy"
+            """);
+
+        Assert.DoesNotContain(
+            ConfigurationLoader.Load(file.Path).Warnings,
+            w => w.Contains("superuser", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void A_default_timeout_above_the_ceiling_is_refused()
     {
         var problems = Refuse($"""
