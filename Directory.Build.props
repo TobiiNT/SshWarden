@@ -21,9 +21,10 @@
 
   <PropertyGroup>
     <!--
-      0.0.1 and not 0.1.0: nothing here is finished. docs/DESIGN.md §7 locks v0 at eight steps and this
-      tree is at step 1, so the number says "started" rather than "a first usable release". It moves
-      when there is something a person could run against a real host.
+      0.0.2 and not 0.1.0: nothing here is finished. docs/DESIGN.md §7 locks v0 at eight steps, so the
+      number stays 0.0.x and says "started" rather than "a first usable release". 0.0.2 is the patch
+      over 0.0.1 - which was never tagged - cut to carry the fix that stops the read and job refusals
+      quoting the target's stderr back to the caller.
 
       Nothing in this repository has been published to nuget.org, and this is checkable rather than
       assumed, because a sentence like it has been wrong before somewhere else: `curl
@@ -31,7 +32,7 @@
       the same queries for `sshwarden.mcp` and `sshwarden.server`. Measured 2026-08-26. Re-check
       before believing it; a comment is a claim and the feed is the fact.
     -->
-    <Version>0.0.1</Version>
+    <Version>0.0.2</Version>
   </PropertyGroup>
 
   <PropertyGroup>
