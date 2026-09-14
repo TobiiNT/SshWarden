@@ -88,7 +88,7 @@
       thing under test is what a caller gets back, and asserting on middleware in isolation would
       not have caught the ordering mistake that makes the endpoint-metadata opt-out invisible.
     -->
-    <PackageVersion Include="Microsoft.AspNetCore.TestHost" Version="10.0.11" />
+    <PackageVersion Include="Microsoft.AspNetCore.TestHost" Version="10.0.12" />
   </ItemGroup>
 
 </Project>
