@@ -81,7 +81,7 @@
   <ItemGroup Label="Tests">
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.10.0" />
     <PackageVersion Include="xunit" Version="2.9.3" />
-    <PackageVersion Include="xunit.runner.visualstudio" Version="4.0.0" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="4.0.1" />
     <!--
       An in-memory server, so the authentication middleware is exercised through a real HTTP
       pipeline - routing, endpoint metadata, headers and status codes - without binding a port. The
