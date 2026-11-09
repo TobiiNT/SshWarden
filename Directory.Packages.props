@@ -58,7 +58,7 @@
     -->
     <PackageVersion Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.12" />
     <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.12" />
-    <PackageVersion Include="Tomlyn" Version="2.10.1" />
+    <PackageVersion Include="Tomlyn" Version="2.11.1" />
   </ItemGroup>
 
   <ItemGroup Label="SSH">
