@@ -75,7 +75,7 @@
       server does not implement signals, it may send no response", which is why a timeout is
       wrapped on the remote side rather than trusted to cancellation.
     -->
-    <PackageVersion Include="SSH.NET" Version="2026.0.0" />
+    <PackageVersion Include="SSH.NET" Version="2026.0.1" />
   </ItemGroup>
 
   <ItemGroup Label="Tests">
